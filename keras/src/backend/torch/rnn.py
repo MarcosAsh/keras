@@ -714,9 +714,6 @@ def _cudnn_lstm(
         # Run LSTM without packing for fixed-length sequences
         outputs, (h_n, c_n) = lstm(inputs, (initial_state_h, initial_state_c))
 
-    outputs = outputs.detach().clone().cpu()
-    h_n = h_n.detach().clone().cpu()
-    c_n = c_n.detach().clone().cpu()
     # Reshape hidden states for return
     h_n = h_n.squeeze(batch_axis)
     c_n = c_n.squeeze(batch_axis)
