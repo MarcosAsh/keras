@@ -124,7 +124,9 @@ class TorchTrainer(base_trainer.Trainer):
             return self.train_step(data)
 
         if self._should_torch_compile():
-            self.train_function = torch.compile(one_step_on_data)
+            self.train_function = torch.compile(
+                one_step_on_data, dynamic=True
+            )
         else:
             self.train_function = one_step_on_data
 
@@ -145,7 +147,9 @@ class TorchTrainer(base_trainer.Trainer):
                 return self.test_step(data)
 
         if self._should_torch_compile():
-            self.test_function = torch.compile(one_step_on_data)
+            self.test_function = torch.compile(
+                one_step_on_data, dynamic=True
+            )
         else:
             self.test_function = one_step_on_data
 
@@ -166,7 +170,9 @@ class TorchTrainer(base_trainer.Trainer):
                 return self.predict_step(data)
 
         if self._should_torch_compile():
-            self.predict_function = torch.compile(one_step_on_data)
+            self.predict_function = torch.compile(
+                one_step_on_data, dynamic=True
+            )
         else:
             self.predict_function = one_step_on_data
 

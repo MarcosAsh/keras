@@ -2,6 +2,10 @@ from keras.src import tree
 from keras.src.api_export import keras_export
 from keras.src.utils.naming import auto_name
 
+# Lazy-initialized flag: True only when running on the torch backend.
+# Used to short-circuit any_symbolic_tensors() during torch.compile tracing.
+_is_torch_backend = None
+
 
 @keras_export("keras.KerasTensor")
 class KerasTensor:
@@ -400,6 +404,21 @@ class KerasTensor:
 
 
 def any_symbolic_tensors(args=None, kwargs=None):
+    global _is_torch_backend
+    if _is_torch_backend is None:
+        from keras.src import backend
+
+        _is_torch_backend = backend.backend() == "torch"
+
+    # When torch.compile is tracing, there are never any KerasTensors.
+    # Short-circuit to avoid Dynamo creating guards on every input tensor,
+    # which otherwise causes excessive recompilation.
+    if _is_torch_backend:
+        import torch
+
+        if torch.compiler.is_compiling():
+            return False
+
     args = args or ()
     kwargs = kwargs or {}
     for x in tree.flatten((args, kwargs)):
