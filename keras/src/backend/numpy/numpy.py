@@ -696,6 +696,13 @@ def gcd(x1, x2):
     return np.gcd(x1, x2).astype(dtype)
 
 
+def geomspace(start, stop, num=50, endpoint=True, dtype=None, axis=0):
+    dtype = dtype or config.floatx()
+    return np.geomspace(
+        start, stop, num=num, endpoint=endpoint, dtype=dtype, axis=axis
+    )
+
+
 def greater(x1, x2):
     return np.greater(x1, x2)
 

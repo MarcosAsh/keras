@@ -3687,6 +3687,80 @@ def get_item(x, key):
     return x[key]
 
 
+class Geomspace(Operation):
+    def __init__(self, num=50, endpoint=True, dtype=None, axis=0, *, name=None):
+        super().__init__(name=name)
+        self.num = num
+        self.endpoint = endpoint
+        self.dtype = dtype
+        self.axis = axis
+
+    def call(self, start, stop):
+        return backend.numpy.geomspace(
+            start,
+            stop,
+            num=self.num,
+            endpoint=self.endpoint,
+            dtype=self.dtype,
+            axis=self.axis,
+        )
+
+    def compute_output_spec(self, start, stop):
+        start_shape = getattr(start, "shape", [])
+        stop_shape = getattr(stop, "shape", [])
+        output_shape = broadcast_shapes(start_shape, stop_shape)
+        axis = canonicalize_axis(self.axis, len(output_shape) + 1)
+        output_shape = list(output_shape)
+        output_shape.insert(axis, self.num)
+        dtype = (
+            self.dtype
+            if self.dtype is not None
+            else backend.standardize_dtype(getattr(start, "dtype", type(start)))
+        )
+        dtype = backend.result_type(dtype, float)
+        return KerasTensor(output_shape, dtype=dtype)
+
+
+@keras_export(["keras.ops.geomspace", "keras.ops.numpy.geomspace"])
+def geomspace(start, stop, num=50, endpoint=True, dtype=None, axis=0):
+    """Returns numbers spaced evenly on a log scale (a geometric progression).
+
+    This is similar to `logspace`, but with endpoints specified directly
+    instead of as logarithms. Each output sample is a constant multiple of
+    the previous.
+
+    Args:
+        start: The starting value of the sequence.
+        stop: The final value of the sequence, unless `endpoint` is `False`.
+            In that case, `num + 1` values are spaced over the interval in
+            log-space, of which all but the last (a sequence of length `num`)
+            are returned.
+        num: Number of samples to generate. Defaults to `50`.
+        endpoint: If `True`, `stop` is the last sample. Otherwise, it is not
+            included. Defaults to `True`.
+        dtype: The type of the output tensor.
+        axis: The axis in the result to store the samples. Relevant only
+            if start or stop are array-like.
+
+    Note:
+        Torch backend does not support `axis` argument.
+
+    Returns:
+        A tensor of `num` samples, evenly spaced on a log scale.
+    """
+    dtype = None if dtype is None else backend.standardize_dtype(dtype)
+    if any_symbolic_tensors((start, stop)):
+        return Geomspace(num, endpoint, dtype, axis)(start, stop)
+    return backend.numpy.geomspace(
+        start,
+        stop,
+        num=num,
+        endpoint=endpoint,
+        dtype=dtype,
+        axis=axis,
+    )
+
+
 class Greater(Operation):
     def call(self, x1, x2):
         return backend.numpy.greater(x1, x2)

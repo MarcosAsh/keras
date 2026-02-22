@@ -774,6 +774,12 @@ def gcd(x1, x2):
     return jnp.gcd(x1, x2)
 
 
+def geomspace(start, stop, num=50, endpoint=True, dtype=None, axis=0):
+    return jnp.geomspace(
+        start, stop, num=num, endpoint=endpoint, dtype=dtype, axis=axis
+    )
+
+
 def greater(x1, x2):
     x1 = convert_to_tensor(x1)
     x2 = convert_to_tensor(x2)

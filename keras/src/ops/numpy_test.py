@@ -224,6 +224,19 @@ class NumpyTwoInputOpsDynamicShapeTest(testing.TestCase):
         y = KerasTensor((2, None))
         self.assertEqual(knp.gcd(x, y).shape, (2, 3))
 
+    def test_geomspace(self):
+        start = KerasTensor((None, 3, 4))
+        stop = KerasTensor((2, 3, 4))
+        self.assertEqual(
+            knp.geomspace(start, stop, 10, axis=1).shape, (2, 10, 3, 4)
+        )
+
+        start = KerasTensor((None, 3))
+        stop = 2
+        self.assertEqual(
+            knp.geomspace(start, stop, 10, axis=1).shape, (None, 10, 3)
+        )
+
     def test_greater(self):
         x = KerasTensor((None, 3))
         y = KerasTensor((2, None))
@@ -793,6 +806,16 @@ class NumpyTwoInputOpsStaticShapeTest(testing.TestCase):
             x = KerasTensor((2, 3))
             y = KerasTensor((2, 3, 4))
             knp.gcd(x, y)
+
+    def test_geomspace(self):
+        start = KerasTensor((2, 3, 4))
+        stop = KerasTensor((2, 3, 4))
+        self.assertEqual(knp.geomspace(start, stop, 10).shape, (10, 2, 3, 4))
+
+        with self.assertRaises(ValueError):
+            start = KerasTensor((2, 3))
+            stop = KerasTensor((2, 3, 4))
+            knp.geomspace(start, stop)
 
     def test_greater(self):
         x = KerasTensor((2, 3))
@@ -3356,6 +3379,46 @@ class NumpyTwoInputOpsCorrectnessTest(testing.TestCase):
         self.assertAllClose(knp.Gcd()(x, y), np.gcd(x, y))
         self.assertAllClose(knp.Gcd()(x, 2), np.gcd(x, 2))
         self.assertAllClose(knp.Gcd()(2, x), np.gcd(2, x))
+
+    def test_geomspace(self):
+        self.assertAllClose(knp.geomspace(1, 1000, 4), np.geomspace(1, 1000, 4))
+        self.assertAllClose(
+            knp.geomspace(1, 1000, 4, endpoint=False),
+            np.geomspace(1, 1000, 4, endpoint=False),
+        )
+        self.assertAllClose(
+            knp.Geomspace(num=4)(1, 1000), np.geomspace(1, 1000, 4)
+        )
+        self.assertAllClose(
+            knp.Geomspace(num=4, endpoint=False)(1, 1000),
+            np.geomspace(1, 1000, 4, endpoint=False),
+        )
+
+        start = np.array([1.0, 2.0, 3.0])
+        stop = np.array([1000.0, 2000.0, 3000.0])
+
+        self.assertAllClose(
+            knp.geomspace(start, stop, 4),
+            np.geomspace(start, stop, 4),
+            atol=1e-5,
+            rtol=1e-5,
+        )
+        self.assertAllClose(
+            knp.geomspace(start, stop, 4, endpoint=False),
+            np.geomspace(start, stop, 4, endpoint=False),
+            atol=1e-5,
+            rtol=1e-5,
+        )
+        self.assertAllClose(
+            knp.Geomspace(num=4)(start, stop),
+            np.geomspace(start, stop, 4),
+            atol=1e-5,
+            rtol=1e-5,
+        )
+        self.assertAllClose(
+            knp.Geomspace(num=4, endpoint=False)(start, stop),
+            np.geomspace(start, stop, 4, endpoint=False),
+        )
 
     def test_greater(self):
         x = np.array([[1, 2, 3], [3, 2, 1]])
@@ -9007,6 +9070,41 @@ class NumpyDtypeTest(testing.TestCase):
         self.assertEqual(
             standardize_dtype(
                 knp.Logspace(num, dtype=dtype).symbolic_call(start, stop).dtype
+            ),
+            expected_dtype,
+        )
+
+    @parameterized.named_parameters(
+        named_product(
+            start_and_stop=[
+                [1, 1000],
+                [0.5, 10.5],
+                [
+                    np.array([1, 2], "float32"),
+                    np.array([100, 200], "float32"),
+                ],
+            ],
+            num=[0, 1, 5],
+            dtype=FLOAT_DTYPES + [None],
+        )
+    )
+    def test_geomspace(self, start_and_stop, num, dtype):
+        import jax.numpy as jnp
+
+        start, stop = start_and_stop
+        expected_dtype = standardize_dtype(
+            jnp.geomspace(start, stop, num, dtype=dtype).dtype
+        )
+
+        self.assertEqual(
+            standardize_dtype(
+                knp.geomspace(start, stop, num, dtype=dtype).dtype
+            ),
+            expected_dtype,
+        )
+        self.assertEqual(
+            standardize_dtype(
+                knp.Geomspace(num, dtype=dtype).symbolic_call(start, stop).dtype
             ),
             expected_dtype,
         )
