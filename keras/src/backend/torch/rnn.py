@@ -821,12 +821,8 @@ def prepare_gru_params(kernel, recurrent_kernel, bias, device):
     z_r, r_r, h_r = torch.chunk(recurrent_kernel, 3, dim=1)
 
     # Reorder to PyTorch format [r, z, h] and transpose
-    weight_ih = (
-        torch.cat([r_k, z_k, h_k], dim=1).T.contiguous().to(device)
-    )
-    weight_hh = (
-        torch.cat([r_r, z_r, h_r], dim=1).T.contiguous().to(device)
-    )
+    weight_ih = torch.cat([r_k, z_k, h_k], dim=1).T.contiguous().to(device)
+    weight_hh = torch.cat([r_r, z_r, h_r], dim=1).T.contiguous().to(device)
 
     if bias is not None:
         # bias shape is (2, 3*units) for reset_after=True
@@ -835,12 +831,8 @@ def prepare_gru_params(kernel, recurrent_kernel, bias, device):
         z_bh, r_bh, h_bh = torch.chunk(bias[1], 3)
 
         # Reorder to [r, z, h]
-        bias_ih = (
-            torch.cat([r_bi, z_bi, h_bi]).contiguous().to(device)
-        )
-        bias_hh = (
-            torch.cat([r_bh, z_bh, h_bh]).contiguous().to(device)
-        )
+        bias_ih = torch.cat([r_bi, z_bi, h_bi]).contiguous().to(device)
+        bias_hh = torch.cat([r_bh, z_bh, h_bh]).contiguous().to(device)
     else:
         hidden_size = recurrent_kernel.shape[0]
         bias_ih = torch.zeros(
@@ -869,9 +861,7 @@ def _cudnn_gru(
     elif initial_state.dim() == 3 and initial_state.shape[1] == 1:
         initial_state = initial_state.permute(1, 0, 2)
 
-    params = prepare_gru_params(
-        kernel, recurrent_kernel, bias, device
-    )
+    params = prepare_gru_params(kernel, recurrent_kernel, bias, device)
 
     # Use functional GRU to maintain gradient flow through weight tensors
     outputs, h_n = torch._VF.gru(
@@ -881,7 +871,7 @@ def _cudnn_gru(
         bias is not None,  # has_biases
         1,  # num_layers
         0.0,  # dropout
-        False,  # training (cuDNN dropout, not Keras dropout)
+        torch.is_grad_enabled(),  # training: must be True for backward pass
         False,  # bidirectional
         True,  # batch_first
     )
