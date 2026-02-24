@@ -4472,20 +4472,9 @@ class Linspace(Operation):
         start_shape = getattr(start, "shape", [])
         stop_shape = getattr(stop, "shape", [])
         output_shape = broadcast_shapes(start_shape, stop_shape)
-        if self.axis == -1:
-            output_shape = output_shape + [self.num]
-        elif self.axis >= 0:
-            output_shape = (
-                output_shape[: self.axis]
-                + [self.num]
-                + output_shape[self.axis :]
-            )
-        else:
-            output_shape = (
-                output_shape[: self.axis + 1]
-                + [self.num]
-                + output_shape[self.axis + 1 :]
-            )
+        output_shape = list(output_shape)
+        axis = canonicalize_axis(self.axis, len(output_shape) + 1)
+        output_shape.insert(axis, self.num)
 
         dtype = (
             self.dtype
@@ -4860,20 +4849,9 @@ class Logspace(Operation):
         start_shape = getattr(start, "shape", [])
         stop_shape = getattr(stop, "shape", [])
         output_shape = broadcast_shapes(start_shape, stop_shape)
-        if self.axis == -1:
-            output_shape = output_shape + [self.num]
-        elif self.axis >= 0:
-            output_shape = (
-                output_shape[: self.axis]
-                + [self.num]
-                + output_shape[self.axis :]
-            )
-        else:
-            output_shape = (
-                output_shape[: self.axis + 1]
-                + [self.num]
-                + output_shape[self.axis + 1 :]
-            )
+        output_shape = list(output_shape)
+        axis = canonicalize_axis(self.axis, len(output_shape) + 1)
+        output_shape.insert(axis, self.num)
         dtype = (
             self.dtype
             if self.dtype is not None
