@@ -577,13 +577,12 @@ def conv(
 
     data_format = backend.standardize_data_format(data_format)
     if data_format == "channels_last":
+        # Permuting a contiguous NHWC tensor to NCHW produces a view
+        # whose strides already match the channels_last memory format,
+        # so no data copy is needed for the input.
         inputs = _transpose_spatial_inputs(inputs)
 
     kernel = _transpose_conv_kernel(kernel)
-
-    if data_format == "channels_last":
-        inputs = _maybe_convert_to_channels_last(inputs)
-        kernel = _maybe_convert_to_channels_last(kernel)
 
     # calc. groups snippet
     in_channels = inputs.shape[1]
@@ -607,6 +606,15 @@ def conv(
         )
     else:
         padding = 0
+
+    # Ensure channels_last memory format right before the conv call,
+    # after padding which may produce a contiguous NCHW tensor.
+    # For the input this is typically a no-op (already channels_last
+    # from the permute above). For the kernel it's a small copy to
+    # rearrange into channels_last layout so cuDNN uses NHWC kernels.
+    if data_format == "channels_last":
+        inputs = _maybe_convert_to_channels_last(inputs)
+        kernel = _maybe_convert_to_channels_last(kernel)
 
     # apply convolution
     if num_spatial_dims == 1:
