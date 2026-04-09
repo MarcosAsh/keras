@@ -526,20 +526,79 @@ class TextVectorization(Layer):
         """
         self._lookup_layer.set_vocabulary(vocabulary, idf_weights=idf_weights)
 
+    def _apply_python_standardize(self, inputs):
+        """Run a callable `standardize` on Python strings, then re-tensor.
+
+        Used on non-TensorFlow backends so that user callables can rely on
+        plain Python string operations (`.lower()`, `re.sub`, ...) instead
+        of receiving a `tf.EagerTensor`.
+        """
+        if isinstance(inputs, tf.Tensor):
+            np_inputs = inputs.numpy()
+        elif isinstance(inputs, np.ndarray):
+            np_inputs = inputs
+        else:
+            np_inputs = np.asarray(inputs)
+
+        def _decode(item):
+            if isinstance(item, (bytes, bytearray)):
+                return item.decode(self._encoding)
+            return item
+
+        def _to_str(value):
+            # Coerce the result of `self._standardize` back into a plain
+            # Python str so it can be packed into a `tf.constant` below.
+            # This also lets users return a `tf.Tensor` from a tf-style
+            # callable on non-TF backends without breaking the layer.
+            if isinstance(value, tf.Tensor):
+                value = value.numpy()
+            if isinstance(value, np.ndarray):
+                value = value.item()
+            if isinstance(value, (bytes, bytearray)):
+                return value.decode(self._encoding)
+            return str(value)
+
+        if np_inputs.ndim == 0:
+            result = self._standardize(_decode(np_inputs.item()))
+            return tf.constant(_to_str(result), dtype=tf.string)
+
+        flat = np_inputs.reshape(-1)
+        results = [_to_str(self._standardize(_decode(item))) for item in flat]
+        reshaped = (
+            np.array(results, dtype=object).reshape(np_inputs.shape).tolist()
+        )
+        return tf.constant(reshaped, dtype=tf.string)
+
     def _preprocess(self, inputs):
         with tf.device("CPU:0"):
-            inputs = tf_utils.ensure_tensor(inputs, dtype=tf.string)
-            if self._standardize in ("lower", "lower_and_strip_punctuation"):
-                inputs = tf.strings.lower(inputs)
-            if self._standardize in (
-                "strip_punctuation",
-                "lower_and_strip_punctuation",
+            if (
+                callable(self._standardize)
+                and backend.backend() != "tensorflow"
             ):
-                inputs = tf.strings.regex_replace(
-                    inputs, r'[!"#$%&()\*\+,-\./:;<=>?@\[\\\]^_`{|}~\']', ""
-                )
-            if callable(self._standardize):
-                inputs = self._standardize(inputs)
+                # On non-TensorFlow backends, run the user-provided callable
+                # on Python strings rather than leaking a `tf.EagerTensor`
+                # into user code. The callable is invoked per element so that
+                # idiomatic Python string operations (e.g. `s.lower()`,
+                # `re.sub`) just work.
+                inputs = self._apply_python_standardize(inputs)
+            else:
+                inputs = tf_utils.ensure_tensor(inputs, dtype=tf.string)
+                if self._standardize in (
+                    "lower",
+                    "lower_and_strip_punctuation",
+                ):
+                    inputs = tf.strings.lower(inputs)
+                if self._standardize in (
+                    "strip_punctuation",
+                    "lower_and_strip_punctuation",
+                ):
+                    inputs = tf.strings.regex_replace(
+                        inputs,
+                        r'[!"#$%&()\*\+,-\./:;<=>?@\[\\\]^_`{|}~\']',
+                        "",
+                    )
+                if callable(self._standardize):
+                    inputs = self._standardize(inputs)
 
             if self._split is not None:
                 # If we are splitting, we validate that the 1st axis is of

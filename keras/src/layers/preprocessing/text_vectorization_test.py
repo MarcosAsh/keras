@@ -405,6 +405,39 @@ class TextVectorizationTest(testing.TestCase, parameterized.TestCase):
         self.assertTrue(backend.is_tensor(output))
         self.assertAllEqual(output, [[2, 3]])
 
+    def test_python_standardize_callable_non_tf_backend(self):
+        # Regression test for https://github.com/keras-team/keras/issues/22626
+        # On non-TF backends, a callable standardize function should be able
+        # to use plain Python string operations rather than receiving a
+        # `tf.EagerTensor`.
+        if backend.backend() == "tensorflow":
+            self.skipTest("Test is for non-TensorFlow backends only.")
+
+        import re
+        import string
+
+        strip_chars = string.punctuation
+        seen_types = []
+
+        def py_standardize(text):
+            seen_types.append(type(text).__name__)
+            text = text.lower()
+            return re.sub(f"[{re.escape(strip_chars)}]", "", text)
+
+        layer = layers.TextVectorization(standardize=py_standardize)
+        layer.adapt(["Hello, world."])
+        # The callable must have been invoked with a string-like Python object
+        # (str / numpy str), never with a tf.EagerTensor.
+        self.assertTrue(len(seen_types) > 0)
+        for t in seen_types:
+            self.assertNotEqual(t, "EagerTensor")
+        vocab = layer.get_vocabulary()
+        self.assertIn("hello", vocab)
+        self.assertIn("world", vocab)
+        # And the layer must produce sensible output afterwards.
+        output = layer(["Hello, world."])
+        self.assertTrue(backend.is_tensor(output))
+
     def test_no_split(self):
         layer = layers.TextVectorization(
             split=None,
