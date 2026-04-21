@@ -1,3 +1,4 @@
+import warnings
 from unittest import mock
 
 import jax
@@ -1764,6 +1765,31 @@ class TestTrainer(testing.TestCase):
         loss1 = model.evaluate(x, y, batch_size=80)
         loss2 = model.evaluate(x, y, batch_size=100)
         self.assertAllClose(loss1, loss2)
+
+    @pytest.mark.requires_trainable_backend
+    @pytest.mark.skipif(
+        backend.backend() == "tensorflow",
+        reason=(
+            "TF builds lazily during function tracing so the drift check is "
+            "not reached on the default (no-distribute) path."
+        ),
+    )
+    def test_warns_when_trainable_toggled_after_compile(self):
+        x = np.random.rand(16, 4)
+        y = np.ones((16, 1))
+
+        model = ExampleModel(units=1)
+        model.compile(optimizer="sgd", loss="mse")
+        model.fit(x, y, batch_size=4, epochs=1, verbose=0)
+
+        model.trainable = False
+        with self.assertWarnsRegex(
+            UserWarning, "trainable state has changed"
+        ):
+            try:
+                model.fit(x, y, batch_size=4, epochs=1, verbose=0)
+            except ValueError:
+                pass
 
     @pytest.mark.requires_trainable_backend
     def test_adds_loss_scaling_optimizer(self):

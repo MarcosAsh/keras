@@ -210,6 +210,8 @@ class Trainer:
         self.test_function = None
         self.predict_function = None
 
+        self._compiled_trainable_variable_ids = None
+
         self._compile_config = serialization_lib.SerializableDict(
             optimizer=optimizer,
             loss=loss,
@@ -1070,6 +1072,20 @@ class Trainer:
             return results[0]
         return results
 
+    def _check_trainable_state_drift(self):
+        current_ids = {id(v) for v in self.trainable_variables}
+        if self._compiled_trainable_variable_ids is None:
+            self._compiled_trainable_variable_ids = current_ids
+            return
+        if current_ids != self._compiled_trainable_variable_ids:
+            warnings.warn(
+                "The model's trainable state has changed since `compile()` "
+                "was called. Toggling `layer.trainable` or "
+                "`model.trainable` after `compile()` does not take effect "
+                "until `compile()` is called again.",
+                stacklevel=2,
+            )
+
     def _assert_compile_called(self, method_name=None):
         if not self.compiled:
             msg = "You must call `compile()` before "
@@ -1159,6 +1175,9 @@ class Trainer:
         if optimizer_unbuilt:
             # Build optimizer
             self.optimizer.build(self.trainable_variables)
+
+        self._check_trainable_state_drift()
+
         self._post_build()
 
 
