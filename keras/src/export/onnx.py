@@ -160,7 +160,7 @@ def export_onnx(
 
                 def forward(self, *flat_args):
                     inputs = tree.pack_sequence_as(
-                        self._structure, list(flat_args)
+                        self._structure, flat_args
                     )
                     if len(inputs) == 1:
                         return self._wrapped(inputs[0])
