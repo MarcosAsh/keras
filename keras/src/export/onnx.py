@@ -159,9 +159,7 @@ def export_onnx(
                     self._structure = structure
 
                 def forward(self, *flat_args):
-                    inputs = tree.pack_sequence_as(
-                        self._structure, flat_args
-                    )
+                    inputs = tree.pack_sequence_as(self._structure, flat_args)
                     if len(inputs) == 1:
                         return self._wrapped(inputs[0])
                     return self._wrapped(*inputs)
