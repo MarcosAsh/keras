@@ -85,8 +85,6 @@ class Attention(Layer):
                 f"Received: score_mode={score_mode}"
             )
 
-        self._return_attention_scores = False
-
     def build(self, input_shape):
         self._validate_inputs(input_shape)
         self.scale = None
@@ -221,7 +219,6 @@ class Attention(Layer):
         use_causal_mask=False,
     ):
         self._validate_inputs(inputs=inputs, mask=mask)
-        self._return_attention_scores = return_attention_scores
         q = inputs[0]
         v = inputs[1]
         k = inputs[2] if len(inputs) > 2 else v
@@ -250,15 +247,9 @@ class Attention(Layer):
         return ops.convert_to_tensor(mask[0])
 
     def compute_output_shape(self, input_shape):
-        query_shape, value_shape, key_shape = input_shape
-        if key_shape is None:
-            key_shape = value_shape
-
-        output_shape = (*query_shape[:-1], value_shape[-1])
-        if self._return_attention_scores:
-            scores_shape = (query_shape[0], query_shape[1], key_shape[1])
-            return output_shape, scores_shape
-        return output_shape
+        query_shape = input_shape[0]
+        value_shape = input_shape[1]
+        return (*query_shape[:-1], value_shape[-1])
 
     def compute_output_spec(
         self,
@@ -273,7 +264,9 @@ class Attention(Layer):
         value = inputs[1]
         key = inputs[2] if len(inputs) > 2 else value
 
-        output_shape = (*query.shape[:-1], value.shape[-1])
+        output_shape = self.compute_output_shape(
+            [query.shape, value.shape, key.shape]
+        )
         output_spec = KerasTensor(output_shape, dtype=self.compute_dtype)
 
         if return_attention_scores:

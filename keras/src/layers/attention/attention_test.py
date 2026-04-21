@@ -468,8 +468,9 @@ class AttentionTest(testing.TestCase):
     def test_symbolic_call_does_not_leak_return_attention_scores(self):
         # `Attention` used to stash `return_attention_scores` on an instance
         # flag in `call()`, so a later symbolic call that set it to `False`
-        # still returned a `(output, scores)` tuple from `compute_output_spec`.
-        # The symbolic path must trust only the explicit parameter.
+        # still returned a `(output, scores)` tuple from `compute_output_spec`
+        # and `compute_output_shape`. Both paths must trust only the explicit
+        # argument.
         attention = layers.Attention()
         q_eager = np.random.rand(2, 3, 5).astype("float32")
         v_eager = np.random.rand(2, 4, 5).astype("float32")
@@ -480,3 +481,8 @@ class AttentionTest(testing.TestCase):
         output = attention([x, y])
         self.assertNotIsInstance(output, (tuple, list))
         self.assertEqual(output.shape, (None, 3, 5))
+
+        self.assertEqual(
+            attention.compute_output_shape([x.shape, y.shape]),
+            (None, 3, 5),
+        )
