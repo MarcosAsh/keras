@@ -89,5 +89,16 @@ def matrix_rank(x, tol=None):
     return torch.linalg.matrix_rank(x, atol=tol).to(torch.int32)
 
 
+def pinv(x, rcond=None):
+    x = convert_to_tensor(x)
+    if rcond is None:
+        return torch.linalg.pinv(x)
+    # `torch.linalg.pinv` expresses the threshold as `rtol`
+    # (relative tolerance), which has the same meaning as numpy's `rcond`:
+    # a singular value is treated as zero when it's smaller than
+    # `rtol * largest_singular_value`.
+    return torch.linalg.pinv(x, rtol=rcond)
+
+
 def jvp(fun, primals, tangents, has_aux=False):
     return torch.func.jvp(fun, primals, tangents, has_aux=has_aux)

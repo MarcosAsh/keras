@@ -109,5 +109,10 @@ def matrix_rank(x, tol=None):
     return jnp.linalg.matrix_rank(x, tol=tol).astype("int32")
 
 
+def pinv(x, rcond=None):
+    x = convert_to_tensor(x)
+    return jnp.linalg.pinv(x, rcond=rcond)
+
+
 def jvp(fun, primals, tangents, has_aux=False):
     return jax.jvp(fun, primals, tangents, has_aux=has_aux)
