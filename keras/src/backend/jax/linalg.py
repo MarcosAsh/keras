@@ -99,5 +99,10 @@ def lstsq(a, b, rcond=None):
     return jnp.linalg.lstsq(a, b, rcond=rcond)[0]
 
 
+def matrix_rank(x, tol=None):
+    x = convert_to_tensor(x)
+    return jnp.linalg.matrix_rank(x, tol=tol)
+
+
 def jvp(fun, primals, tangents, has_aux=False):
     return jax.jvp(fun, primals, tangents, has_aux=has_aux)
