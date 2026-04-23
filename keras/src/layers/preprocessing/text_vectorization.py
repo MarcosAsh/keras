@@ -49,8 +49,14 @@ class TextVectorization(Layer):
        serializables (see `keras.saving.register_keras_serializable`
        for more details).
     2. When using a custom callable for `standardize`, the data received
-       by the callable will be exactly as passed to this layer. The callable
-       should return a tensor of the same shape as the input.
+       by the callable depends on the active Keras backend. With the
+       TensorFlow backend, the callable receives a `tf.Tensor` of dtype
+       `string`, so it should use `tf.strings` operations. With any other
+       backend (JAX, NumPy, PyTorch, OpenVINO) the callable receives a
+       NumPy array of unicode strings, so it should use `np.char` /
+       `np.strings` operations (or any vectorized string logic of your
+       choice). The callable should return data of the same shape as the
+       input.
     3. When using a custom callable for `split`, the data received by the
        callable will have the 1st dimension squeezed out - instead of
        `[["string to split"], ["another string to split"]]`, the Callable will
@@ -527,11 +533,11 @@ class TextVectorization(Layer):
         self._lookup_layer.set_vocabulary(vocabulary, idf_weights=idf_weights)
 
     def _apply_python_standardize(self, inputs):
-        """Run a callable `standardize` on Python strings, then re-tensor.
+        """Run a callable `standardize` on a NumPy string array.
 
-        Used on non-TensorFlow backends so that user callables can rely on
-        plain Python string operations (`.lower()`, `re.sub`, ...) instead
-        of receiving a `tf.EagerTensor`.
+        Used on non-TensorFlow backends so that the user callable receives
+        a NumPy array of unicode strings (suitable for `np.char` /
+        `np.strings` operations) rather than a `tf.EagerTensor`.
         """
         if isinstance(inputs, tf.Tensor):
             np_inputs = inputs.numpy()
@@ -540,34 +546,24 @@ class TextVectorization(Layer):
         else:
             np_inputs = np.asarray(inputs)
 
-        def _decode(item):
-            if isinstance(item, (bytes, bytearray)):
-                return item.decode(self._encoding)
-            return item
-
-        def _to_str(value):
-            # Coerce the result of `self._standardize` back into a plain
-            # Python str so it can be packed into a `tf.constant` below.
-            # This also lets users return a `tf.Tensor` from a tf-style
-            # callable on non-TF backends without breaking the layer.
-            if isinstance(value, tf.Tensor):
-                value = value.numpy()
-            if isinstance(value, np.ndarray):
-                value = value.item()
+        def _decode(value):
             if isinstance(value, (bytes, bytearray)):
                 return value.decode(self._encoding)
             return str(value)
 
         if np_inputs.ndim == 0:
-            result = self._standardize(_decode(np_inputs.item()))
-            return tf.constant(_to_str(result), dtype=tf.string)
+            decoded = np.array(_decode(np_inputs.item()), dtype=np.str_)
+        else:
+            flat = np_inputs.reshape(-1)
+            decoded = np.array(
+                [_decode(item) for item in flat], dtype=np.str_
+            ).reshape(np_inputs.shape)
 
-        flat = np_inputs.reshape(-1)
-        results = [_to_str(self._standardize(_decode(item))) for item in flat]
-        reshaped = (
-            np.array(results, dtype=object).reshape(np_inputs.shape).tolist()
-        )
-        return tf.constant(reshaped, dtype=tf.string)
+        result = self._standardize(decoded)
+
+        if isinstance(result, tf.Tensor):
+            return tf.cast(result, tf.string)
+        return tf.constant(np.asarray(result), dtype=tf.string)
 
     def _preprocess(self, inputs):
         with tf.device("CPU:0"):
@@ -575,11 +571,11 @@ class TextVectorization(Layer):
                 callable(self._standardize)
                 and backend.backend() != "tensorflow"
             ):
-                # On non-TensorFlow backends, run the user-provided callable
-                # on Python strings rather than leaking a `tf.EagerTensor`
-                # into user code. The callable is invoked per element so that
-                # idiomatic Python string operations (e.g. `s.lower()`,
-                # `re.sub`) just work.
+                # On non-TensorFlow backends, hand the user-provided callable
+                # a NumPy array of unicode strings so it can use `np.char` /
+                # `np.strings` ops rather than `tf.strings` (which would
+                # require a `tf.EagerTensor` and TF as a hard dependency
+                # outside TF backend code).
                 inputs = self._apply_python_standardize(inputs)
             else:
                 inputs = tf_utils.ensure_tensor(inputs, dtype=tf.string)
