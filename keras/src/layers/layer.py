@@ -962,7 +962,7 @@ class Layer(BackendLayer, Operation):
                 only_tensor_arg = call_spec.tensor_arguments_dict[arg_name]
                 # Fast path: the most common case is a single tensor, not a
                 # nested structure, so skip the tree.map_structure call.
-                if backend.is_tensor(only_tensor_arg):
+                if is_backend_tensor_or_symbolic(only_tensor_arg):
                     mask = backend.get_keras_mask(only_tensor_arg)
                 else:
                     mask = tree.map_structure(
@@ -975,7 +975,7 @@ class Layer(BackendLayer, Operation):
                 expected_mask_arg_name = f"{k}_mask"
                 if expected_mask_arg_name in call_spec.argument_names:
                     if call_spec.arguments_dict[expected_mask_arg_name] is None:
-                        if backend.is_tensor(v):
+                        if is_backend_tensor_or_symbolic(v):
                             mask = backend.get_keras_mask(v)
                         else:
                             mask = tree.map_structure(
@@ -991,7 +991,7 @@ class Layer(BackendLayer, Operation):
         else:
             # Case 2: Fallback to the mask attached to the first input tensor.
             first_arg = call_spec.first_arg
-            if backend.is_tensor(first_arg):
+            if is_backend_tensor_or_symbolic(first_arg, allow_none=True):
                 previous_mask = backend.get_keras_mask(first_arg)
             else:
                 previous_mask = tree.map_structure(
