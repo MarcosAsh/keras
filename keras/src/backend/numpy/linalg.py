@@ -100,7 +100,7 @@ def lstsq(a, b, rcond=None):
 
 def matrix_rank(x, tol=None):
     x = convert_to_tensor(x)
-    return np.linalg.matrix_rank(x, tol=tol)
+    return np.linalg.matrix_rank(x, tol=tol).astype("int32")
 
 
 def jvp(fun, primals, tangents, has_aux=False):
