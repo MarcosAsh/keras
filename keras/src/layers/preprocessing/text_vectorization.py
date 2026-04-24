@@ -532,40 +532,39 @@ class TextVectorization(Layer):
         """
         self._lookup_layer.set_vocabulary(vocabulary, idf_weights=idf_weights)
 
-    def _apply_python_standardize(self, inputs):
+    def _apply_standardize_with_np_arrays(self, inputs):
         """Run a callable `standardize` on a NumPy string array.
 
-        Used on non-TensorFlow backends so that the user callable receives
-        a NumPy array of unicode strings (suitable for `np.char` /
-        `np.strings` operations) rather than a `tf.EagerTensor`.
+        Used on non-TensorFlow backends so the user callable receives a NumPy
+        array of unicode strings (suitable for `np.char` / `np.strings` ops)
+        rather than a `tf.EagerTensor`.
         """
-        if isinstance(inputs, tf.Tensor):
-            np_inputs = inputs.numpy()
-        elif isinstance(inputs, np.ndarray):
+        if isinstance(inputs, np.ndarray):
             np_inputs = inputs
+        elif backend.is_tensor(inputs):
+            np_inputs = backend.convert_to_numpy(inputs)
         else:
             np_inputs = np.asarray(inputs)
 
-        def _decode(value):
-            if isinstance(value, (bytes, bytearray)):
-                return value.decode(self._encoding)
-            return str(value)
+        if np_inputs.dtype.kind == "S":
+            np_inputs = np.char.decode(np_inputs, self._encoding)
+        elif np_inputs.dtype.kind == "O":
+            # Object arrays (e.g. from tf.string tensors) contain `bytes`.
+            np_inputs = np.char.decode(
+                np_inputs.astype(np.bytes_), self._encoding
+            )
 
-        if np_inputs.ndim == 0:
-            decoded = np.array(_decode(np_inputs.item()), dtype=np.str_)
-        else:
-            flat = np_inputs.reshape(-1)
-            decoded = np.array(
-                [_decode(item) for item in flat], dtype=np.str_
-            ).reshape(np_inputs.shape)
-
-        result = self._standardize(decoded)
+        result = self._standardize(np_inputs)
 
         if isinstance(result, tf.Tensor):
             return tf.cast(result, tf.string)
         return tf.constant(np.asarray(result), dtype=tf.string)
 
     def _preprocess(self, inputs):
+        if not isinstance(
+            inputs, (tf.Tensor, tf.RaggedTensor, np.ndarray, list, tuple)
+        ) and backend.is_tensor(inputs):
+            inputs = backend.convert_to_numpy(inputs)
         with tf.device("CPU:0"):
             if (
                 callable(self._standardize)
@@ -576,7 +575,7 @@ class TextVectorization(Layer):
                 # `np.strings` ops rather than `tf.strings` (which would
                 # require a `tf.EagerTensor` and TF as a hard dependency
                 # outside TF backend code).
-                inputs = self._apply_python_standardize(inputs)
+                inputs = self._apply_standardize_with_np_arrays(inputs)
             else:
                 inputs = tf_utils.ensure_tensor(inputs, dtype=tf.string)
                 if self._standardize in (
@@ -631,11 +630,6 @@ class TextVectorization(Layer):
             return inputs
 
     def call(self, inputs):
-        if not isinstance(
-            inputs, (tf.Tensor, tf.RaggedTensor, np.ndarray, list, tuple)
-        ):
-            inputs = tf.convert_to_tensor(backend.convert_to_numpy(inputs))
-
         inputs = self._preprocess(inputs)
 
         lookup_data = self._lookup_layer.call(inputs)
