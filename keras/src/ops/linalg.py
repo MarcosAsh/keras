@@ -697,7 +697,7 @@ class MatrixRank(Operation):
         self.tol = tol
 
     def call(self, x):
-        return _matrix_rank(x, tol=self.tol)
+        return backend.linalg.matrix_rank(x, tol=self.tol)
 
     def compute_output_spec(self, x):
         _assert_2d(x)
@@ -729,12 +729,6 @@ def matrix_rank(x, tol=None):
     """
     if any_symbolic_tensors((x,)):
         return MatrixRank(tol=tol).symbolic_call(x)
-    return _matrix_rank(x, tol=tol)
-
-
-def _matrix_rank(x, tol=None):
-    x = backend.convert_to_tensor(x)
-    _assert_2d(x)
     return backend.linalg.matrix_rank(x, tol=tol)
 
 

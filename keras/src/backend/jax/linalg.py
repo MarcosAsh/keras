@@ -101,6 +101,11 @@ def lstsq(a, b, rcond=None):
 
 def matrix_rank(x, tol=None):
     x = convert_to_tensor(x)
+    if x.ndim < 2:
+        raise ValueError(
+            "Expected input to have rank >= 2. "
+            f"Received input with shape {x.shape}."
+        )
     return jnp.linalg.matrix_rank(x, tol=tol).astype("int32")
 
 

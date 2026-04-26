@@ -84,13 +84,9 @@ def lstsq(a, b, rcond=None):
 
 def matrix_rank(x, tol=None):
     x = convert_to_tensor(x)
-    if tol is None:
-        res = torch.linalg.matrix_rank(x)
-    else:
-        # `torch.linalg.matrix_rank` uses `atol` for the absolute threshold
-        # that numpy's `tol` also represents.
-        res = torch.linalg.matrix_rank(x, atol=tol)
-    return res.to(torch.int32)
+    # `torch.linalg.matrix_rank` uses `atol` for the absolute threshold
+    # that numpy's `tol` also represents.
+    return torch.linalg.matrix_rank(x, atol=tol).to(torch.int32)
 
 
 def jvp(fun, primals, tangents, has_aux=False):
