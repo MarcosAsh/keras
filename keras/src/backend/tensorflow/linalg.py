@@ -253,8 +253,6 @@ def matrix_rank(x, tol=None):
 
 def pinv(x, rcond=None):
     x = convert_to_tensor(x)
-    if rcond is None:
-        return tf.linalg.pinv(x)
     return tf.linalg.pinv(x, rcond=rcond)
 
 

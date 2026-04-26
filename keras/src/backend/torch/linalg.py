@@ -91,12 +91,8 @@ def matrix_rank(x, tol=None):
 
 def pinv(x, rcond=None):
     x = convert_to_tensor(x)
-    if rcond is None:
-        return torch.linalg.pinv(x)
-    # `torch.linalg.pinv` expresses the threshold as `rtol`
-    # (relative tolerance), which has the same meaning as numpy's `rcond`:
-    # a singular value is treated as zero when it's smaller than
-    # `rtol * largest_singular_value`.
+    # `torch.linalg.pinv` expresses the threshold as `rtol` (relative
+    # tolerance), with the same meaning as numpy's `rcond`.
     return torch.linalg.pinv(x, rtol=rcond)
 
 

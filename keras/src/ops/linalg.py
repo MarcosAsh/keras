@@ -738,7 +738,7 @@ class Pinv(Operation):
         self.rcond = rcond
 
     def call(self, x):
-        return _pinv(x, rcond=self.rcond)
+        return backend.linalg.pinv(x, rcond=self.rcond)
 
     def compute_output_spec(self, x):
         _assert_2d(x)
@@ -775,12 +775,6 @@ def pinv(x, rcond=None):
     """
     if any_symbolic_tensors((x,)):
         return Pinv(rcond=rcond).symbolic_call(x)
-    return _pinv(x, rcond=rcond)
-
-
-def _pinv(x, rcond=None):
-    x = backend.convert_to_tensor(x)
-    _assert_2d(x)
     return backend.linalg.pinv(x, rcond=rcond)
 
 
