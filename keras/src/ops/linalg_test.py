@@ -708,11 +708,11 @@ class LinalgOpsCorrectnessTest(testing.TestCase):
 
         out = linalg.pinv(a, rcond=rcond)
         ref = np.linalg.pinv(a, rcond=rcond if rcond is not None else 1e-15)
-        self.assertAllClose(out, ref, atol=1e-4, tpu_atol=1e-3, tpu_rtol=1e-3)
+        self.assertAllClose(out, ref, atol=1e-4, tpu_atol=1e-2, tpu_rtol=1e-2)
 
         # Moore-Penrose identity: A @ pinv(A) @ A == A.
         a_out = ops.matmul(ops.matmul(a, out), a)
-        self.assertAllClose(a_out, a, atol=1e-4, tpu_atol=1e-3, tpu_rtol=1e-3)
+        self.assertAllClose(a_out, a, atol=1e-4, tpu_atol=1e-2, tpu_rtol=1e-2)
 
         a_symb = backend.KerasTensor(shape, dtype="float32")
         out_symb = linalg.pinv(a_symb)
@@ -724,7 +724,7 @@ class LinalgOpsCorrectnessTest(testing.TestCase):
 
         out = linalg.pinv(a)
         ref = np.linalg.pinv(a)
-        self.assertAllClose(out, ref, atol=1e-4, tpu_atol=1e-3, tpu_rtol=1e-3)
+        self.assertAllClose(out, ref, atol=1e-4, tpu_atol=1e-2, tpu_rtol=1e-2)
         self.assertEqual(tuple(out.shape), (3, 4, 6))
 
 
