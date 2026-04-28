@@ -302,7 +302,7 @@ class Bidirectional(Layer):
         return cudnn_ok(
             fwd.cell.activation,
             fwd.cell.recurrent_activation,
-            unroll=False,
+            unroll=fwd.unroll,
             use_bias=True,
         )
 
@@ -320,11 +320,9 @@ class Bidirectional(Layer):
             zeros = ops.zeros((batch_size, units), dtype=sequences.dtype)
             fwd_h0, fwd_c0, bwd_h0, bwd_c0 = zeros, zeros, zeros, zeros
         else:
-            half = len(initial_state) // 2
-            if len(initial_state) != 4 or half != 2:
+            if len(initial_state) != 4:
                 raise NotImplementedError
-            fwd_h0, fwd_c0 = initial_state[0], initial_state[1]
-            bwd_h0, bwd_c0 = initial_state[2], initial_state[3]
+            fwd_h0, fwd_c0, bwd_h0, bwd_c0 = initial_state
 
         fwd_out, bwd_out = bidirectional_lstm(
             sequences,
@@ -371,7 +369,7 @@ class Bidirectional(Layer):
         else:
             raise ValueError(
                 "Unrecognized value for `merge_mode`. "
-                f"Received: {self.merge_mode}"
+                f"Received: {self.merge_mode}. "
                 'Expected one of {"concat", "sum", "ave", "mul"}.'
             )
 
