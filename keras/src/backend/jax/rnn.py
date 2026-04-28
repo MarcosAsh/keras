@@ -428,7 +428,9 @@ def bidirectional_lstm(
             bidirectional=True,
         )
     except (RuntimeError, TypeError, ValueError) as e:
-        raise NotImplementedError(f"cuDNN bidirectional LSTM failed: {e}") from e
+        raise NotImplementedError(
+            f"cuDNN bidirectional LSTM failed: {e}"
+        ) from e
 
     # cuDNN returns y of shape (batch, seq_len, num_directions * hidden).
     # The forward half is in original time order (h after seeing

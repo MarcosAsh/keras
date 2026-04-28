@@ -371,9 +371,7 @@ class SimpleRNNTest(testing.TestCase):
         self.assertFalse(off._can_use_jax_cudnn_fused(mask=None))
 
         # Dropout disables the fast path.
-        dp = layers.Bidirectional(
-            layers.LSTM(4, use_cudnn="auto", dropout=0.1)
-        )
+        dp = layers.Bidirectional(layers.LSTM(4, use_cudnn="auto", dropout=0.1))
         dp.build((None, 5, 3))
         self.assertFalse(dp._can_use_jax_cudnn_fused(mask=None))
 
