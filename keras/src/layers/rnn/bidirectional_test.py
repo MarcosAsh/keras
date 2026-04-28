@@ -1,5 +1,7 @@
 import numpy as np
+import pytest
 
+from keras.src import backend
 from keras.src import initializers
 from keras.src import layers
 from keras.src import testing
@@ -332,3 +334,83 @@ class SimpleRNNTest(testing.TestCase):
         bidi = layers.Bidirectional(rnn)
         self.assertFalse(hasattr(bidi.forward_layer, "use_cudnn"))
         self.assertFalse(hasattr(bidi.backward_layer, "use_cudnn"))
+
+    @pytest.mark.skipif(
+        backend.backend() != "jax",
+        reason="JAX-only fused cuDNN bidirectional path",
+    )
+    def test_jax_cudnn_eligibility(self):
+        # LSTM with use_cudnn != False is eligible.
+        bidi = layers.Bidirectional(layers.LSTM(4, use_cudnn="auto"))
+        bidi.build((None, 5, 3))
+        # Whether cuDNN itself is available depends on the runner; the
+        # check still gates correctly on layer/config attributes.
+        if backend.backend() == "jax":
+            from keras.src.backend.jax.rnn import cudnn_ok
+
+            expected = cudnn_ok(
+                bidi.forward_layer.cell.activation,
+                bidi.forward_layer.cell.recurrent_activation,
+                unroll=False,
+                use_bias=True,
+            )
+            self.assertEqual(bidi._can_use_jax_cudnn_fused(mask=None), expected)
+
+        # GRU and SimpleRNN are not eligible.
+        gru = layers.Bidirectional(layers.GRU(4, use_cudnn="auto"))
+        gru.build((None, 5, 3))
+        self.assertFalse(gru._can_use_jax_cudnn_fused(mask=None))
+
+        simple = layers.Bidirectional(layers.SimpleRNN(4))
+        simple.build((None, 5, 3))
+        self.assertFalse(simple._can_use_jax_cudnn_fused(mask=None))
+
+        # use_cudnn=False disables the fast path.
+        off = layers.Bidirectional(layers.LSTM(4, use_cudnn=False))
+        off.build((None, 5, 3))
+        self.assertFalse(off._can_use_jax_cudnn_fused(mask=None))
+
+        # Dropout disables the fast path.
+        dp = layers.Bidirectional(
+            layers.LSTM(4, use_cudnn="auto", dropout=0.1)
+        )
+        dp.build((None, 5, 3))
+        self.assertFalse(dp._can_use_jax_cudnn_fused(mask=None))
+
+        # A mask disables the fast path.
+        eligible = layers.Bidirectional(layers.LSTM(4, use_cudnn="auto"))
+        eligible.build((None, 5, 3))
+        mask = np.ones((2, 5), dtype="bool")
+        self.assertFalse(eligible._can_use_jax_cudnn_fused(mask=mask))
+
+    @pytest.mark.skipif(
+        backend.backend() != "jax",
+        reason="JAX-only fused cuDNN bidirectional path",
+    )
+    def test_jax_cudnn_fused_matches_unfused(self):
+        # On CPU runners cuDNN is unavailable and both paths fall through
+        # to the generic RNN loop, so this test trivially passes; on GPU
+        # runners it exercises the fused dispatch and asserts numerical
+        # equivalence with the two-call reference.
+        rng = np.random.default_rng(0)
+        x = rng.standard_normal((3, 6, 4)).astype("float32")
+
+        def _build(use_cudnn):
+            layer = layers.Bidirectional(
+                layers.LSTM(
+                    5,
+                    use_cudnn=use_cudnn,
+                    return_sequences=True,
+                    kernel_initializer=initializers.GlorotUniform(seed=1),
+                    recurrent_initializer=initializers.Orthogonal(seed=2),
+                )
+            )
+            layer.build(x.shape)
+            return layer
+
+        ref = _build(use_cudnn=False)
+        fused = _build(use_cudnn="auto")
+        for rv, fv in zip(ref.weights, fused.weights):
+            fv.assign(rv.value)
+
+        self.assertAllClose(ref(x), fused(x), atol=1e-5)
