@@ -201,9 +201,9 @@ class Bidirectional(Layer):
         mask=None,
         training=None,
     ):
-        if self._can_use_jax_cudnn_fused(mask):
+        if self._can_attempt_fused_lstm(mask):
             try:
-                return self._call_jax_cudnn_fused(sequences, initial_state)
+                return self._call_fused_lstm(sequences, initial_state)
             except NotImplementedError:
                 pass
 
@@ -265,11 +265,12 @@ class Bidirectional(Layer):
             return (output,) + states
         return output
 
-    def _can_use_jax_cudnn_fused(self, mask):
-        # Fast path: a single fused cuDNN bidirectional LSTM call replaces
-        # two separate forward / backward cuDNN invocations.
-        if backend.backend() != "jax":
-            return False
+    def _can_attempt_fused_lstm(self, mask):
+        # Layer-level preconditions for dispatching to
+        # `backend.bidirectional_lstm`. Backends that don't support a
+        # fused path (or don't have the runtime resources for one, e.g.
+        # no GPU) raise `NotImplementedError` from the call itself, and
+        # the caller falls back to the two-layer path.
         if mask is not None or self.stateful:
             return False
 
@@ -296,19 +297,9 @@ class Bidirectional(Layer):
             return False
         if not fwd.built or not bwd.built:
             return False
+        return True
 
-        from keras.src.backend.jax.rnn import cudnn_ok
-
-        return cudnn_ok(
-            fwd.cell.activation,
-            fwd.cell.recurrent_activation,
-            unroll=fwd.unroll,
-            use_bias=True,
-        )
-
-    def _call_jax_cudnn_fused(self, sequences, initial_state):
-        from keras.src.backend.jax.rnn import bidirectional_lstm
-
+    def _call_fused_lstm(self, sequences, initial_state):
         fwd_cell = self.forward_layer.cell
         bwd_cell = self.backward_layer.cell
         units = fwd_cell.units
@@ -324,7 +315,7 @@ class Bidirectional(Layer):
                 raise NotImplementedError
             fwd_h0, fwd_c0, bwd_h0, bwd_c0 = initial_state
 
-        fwd_out, bwd_out = bidirectional_lstm(
+        fwd_out, bwd_out = backend.bidirectional_lstm(
             sequences,
             fwd_h0,
             fwd_c0,
@@ -340,7 +331,7 @@ class Bidirectional(Layer):
             activation=fwd_cell.activation,
             recurrent_activation=fwd_cell.recurrent_activation,
             return_sequences=self.return_sequences,
-            unroll=False,
+            unroll=self.forward_layer.unroll,
         )
         fwd_last, fwd_seq, fwd_states = fwd_out
         bwd_last, bwd_seq, bwd_states = bwd_out
