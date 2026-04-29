@@ -1070,6 +1070,12 @@ def _ctc_greedy_decode(
     return indices, scores
 
 
+# Knuth's multiplicative hash constant. Used as the polynomial base in
+# `_unique_padded`; int64 overflow during exponentiation is intentional
+# since we only need a deterministic path -> hash mapping.
+_KNUTH_HASH_CONSTANT = 2654435769
+
+
 def _unique_padded(paths, size, pad):
     """Hash-based row-dedup, padded to a fixed leading size with `pad` rows.
 
@@ -1088,14 +1094,12 @@ def _unique_padded(paths, size, pad):
     device = paths.device
 
     # Polynomial hash. Shift values to non-negative so all-`pad` rows
-    # don't collapse to zero. Int64 overflow is fine: we just need a
-    # deterministic mapping; collisions are verified below.
+    # don't collapse to zero. Adjacent same-hash rows are verified for
+    # equality below, so collisions stay correct.
     p = paths.to(torch.int64) + 1
-    # 2654435769 is Knuth's multiplicative hash constant; the int64
-    # arithmetic is allowed to overflow because we only need a
-    # deterministic mapping, and adjacent same-hash rows are verified
-    # for equality below.
-    powers = 2654435769 ** torch.arange(t, dtype=torch.int64, device=device)
+    powers = _KNUTH_HASH_CONSTANT ** torch.arange(
+        t, dtype=torch.int64, device=device
+    )
     hashes = (p * powers).sum(dim=1)
 
     order = torch.argsort(hashes, stable=True)
@@ -1266,11 +1270,8 @@ def _ctc_beam_prune(paths, scores, masked, num_classes, beam_width, _pad):
         paths, size=2 * num_classes * beam_width, pad=_pad
     )
 
-    neg_inf = torch.tensor(
-        float("-inf"), dtype=scores.dtype, device=scores.device
-    )
-    emit_scores = torch.where(masked, neg_inf, scores)
-    mask_scores = torch.where(masked, scores, neg_inf)
+    emit_scores = torch.where(masked, float("-inf"), scores)
+    mask_scores = torch.where(masked, scores, float("-inf"))
 
     n_uniques = paths_unique.shape[0]
     emit_scores = _merge_scores(inverse, emit_scores, n_uniques)
