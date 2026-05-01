@@ -41,6 +41,7 @@ from keras.src.ops.numpy import bitwise_xor as bitwise_xor
 from keras.src.ops.numpy import blackman as blackman
 from keras.src.ops.numpy import broadcast_to as broadcast_to
 from keras.src.ops.numpy import cbrt as cbrt
+from keras.src.ops.numpy import cdist as cdist
 from keras.src.ops.numpy import ceil as ceil
 from keras.src.ops.numpy import clip as clip
 from keras.src.ops.numpy import concatenate as concatenate

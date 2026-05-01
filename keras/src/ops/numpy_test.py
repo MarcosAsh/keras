@@ -173,6 +173,18 @@ class NumpyTwoInputOpsDynamicShapeTest(testing.TestCase):
 
     # right_shift is same as bitwise_right_shift
 
+    def test_cdist(self):
+        x1 = KerasTensor((None, 3))
+        x2 = KerasTensor((4, 3))
+        self.assertEqual(knp.cdist(x1, x2).shape, (None, 4))
+
+        x1 = KerasTensor((2, None, 3))
+        x2 = KerasTensor((2, 4, 3))
+        self.assertEqual(knp.cdist(x1, x2).shape, (2, None, 4))
+
+        with self.assertRaises(ValueError):
+            knp.cdist(KerasTensor((3,)), KerasTensor((4, 3)))
+
     def test_cross(self):
         x1 = KerasTensor((2, 3, 3))
         x2 = KerasTensor((1, 3, 2))
@@ -788,6 +800,15 @@ class NumpyTwoInputOpsStaticShapeTest(testing.TestCase):
         self.assertEqual(knp.bitwise_right_shift(x, y).shape, (2, 3))
 
     # right_shift is same as bitwise_right_shift
+
+    def test_cdist(self):
+        x1 = KerasTensor((5, 3))
+        x2 = KerasTensor((4, 3))
+        self.assertEqual(knp.cdist(x1, x2).shape, (5, 4))
+
+        x1 = KerasTensor((2, 5, 3))
+        x2 = KerasTensor((2, 4, 3))
+        self.assertEqual(knp.cdist(x1, x2).shape, (2, 5, 4))
 
     def test_cross(self):
         x1 = KerasTensor((2, 3, 3))
@@ -3452,6 +3473,32 @@ class NumpyTwoInputOpsCorrectnessTest(testing.TestCase):
         self.assertAllClose(knp.BitwiseRightShift()(x, y), np.right_shift(x, y))
 
     # right_shift is same as bitwise_right_shift
+
+    def test_cdist(self):
+        from scipy.spatial.distance import cdist as scipy_cdist
+
+        rng = np.random.default_rng(0)
+        x1 = rng.standard_normal((5, 4)).astype("float32")
+        x2 = rng.standard_normal((6, 4)).astype("float32")
+
+        self.assertAllClose(knp.cdist(x1, x2), scipy_cdist(x1, x2), atol=1e-5)
+        self.assertAllClose(
+            knp.cdist(x1, x2, p=1.0),
+            scipy_cdist(x1, x2, metric="cityblock"),
+            atol=1e-5,
+        )
+        self.assertAllClose(
+            knp.cdist(x1, x2, p=float("inf")),
+            scipy_cdist(x1, x2, metric="chebyshev"),
+            atol=1e-5,
+        )
+        self.assertAllClose(knp.Cdist()(x1, x2), scipy_cdist(x1, x2), atol=1e-5)
+
+        # Batched.
+        b1 = rng.standard_normal((3, 5, 4)).astype("float32")
+        b2 = rng.standard_normal((3, 6, 4)).astype("float32")
+        ref = np.stack([scipy_cdist(b1[i], b2[i]) for i in range(3)])
+        self.assertAllClose(knp.cdist(b1, b2), ref, atol=1e-5)
 
     def test_cross(self):
         x1 = np.ones([2, 1, 4, 3])

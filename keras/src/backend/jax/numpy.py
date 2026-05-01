@@ -537,6 +537,18 @@ def cbrt(x):
     return jnp.cbrt(x)
 
 
+def cdist(x1, x2, p=2.0):
+    x1 = convert_to_tensor(x1)
+    x2 = convert_to_tensor(x2)
+    out_dtype = dtypes.result_type(x1.dtype, x2.dtype, float)
+    x1 = x1.astype(out_dtype)
+    x2 = x2.astype(out_dtype)
+    diff = jnp.abs(x1[..., :, None, :] - x2[..., None, :, :])
+    if p == float("inf"):
+        return jnp.max(diff, axis=-1)
+    return jnp.sum(diff**p, axis=-1) ** (1.0 / p)
+
+
 @sparse.elementwise_unary(linear=False)
 def ceil(x):
     x = convert_to_tensor(x)

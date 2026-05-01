@@ -1168,6 +1168,18 @@ def cbrt(x):
     return tf.sign(x) * tf.pow(tf.abs(x), 1.0 / 3.0)
 
 
+def cdist(x1, x2, p=2.0):
+    x1 = convert_to_tensor(x1)
+    x2 = convert_to_tensor(x2)
+    out_dtype = dtypes.result_type(x1.dtype, x2.dtype, float)
+    x1 = tf.cast(x1, out_dtype)
+    x2 = tf.cast(x2, out_dtype)
+    diff = tf.abs(x1[..., :, None, :] - x2[..., None, :, :])
+    if p == float("inf"):
+        return tf.reduce_max(diff, axis=-1)
+    return tf.reduce_sum(tf.pow(diff, p), axis=-1) ** (1.0 / p)
+
+
 @sparse.elementwise_unary
 def ceil(x):
     x = convert_to_tensor(x)

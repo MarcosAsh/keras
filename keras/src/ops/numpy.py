@@ -1942,6 +1942,61 @@ def cbrt(x):
     return backend.numpy.cbrt(x)
 
 
+class Cdist(Operation):
+    def __init__(self, p=2.0, *, name=None):
+        super().__init__(name=name)
+        self.p = p
+
+    def call(self, x1, x2):
+        return backend.numpy.cdist(x1, x2, p=self.p)
+
+    def compute_output_spec(self, x1, x2):
+        if len(x1.shape) < 2 or len(x2.shape) < 2:
+            raise ValueError(
+                "Inputs to `cdist` must have rank >= 2. "
+                f"Received shapes: x1={x1.shape}, x2={x2.shape}."
+            )
+        batch_shape = broadcast_shapes(x1.shape[:-2], x2.shape[:-2])
+        output_shape = tuple(batch_shape) + (x1.shape[-2], x2.shape[-2])
+        dtype = dtypes.result_type(x1.dtype, x2.dtype, float)
+        return KerasTensor(output_shape, dtype=dtype)
+
+
+@keras_export(["keras.ops.cdist", "keras.ops.numpy.cdist"])
+def cdist(x1, x2, p=2.0):
+    """Compute pairwise distances between two collections of vectors.
+
+    For input tensors `x1` of shape `(..., M, D)` and `x2` of shape
+    `(..., N, D)`, returns an output of shape `(..., M, N)` where
+    `out[..., i, j]` is the p-norm distance between `x1[..., i, :]`
+    and `x2[..., j, :]`.
+
+    Args:
+        x1: Input tensor of shape `(..., M, D)`.
+        x2: Input tensor of shape `(..., N, D)`. The trailing dimension
+            must match that of `x1`. Leading batch dimensions are
+            broadcast against those of `x1`.
+        p: Order of the Minkowski p-norm to use, defaults to `2.0`
+            (Euclidean distance). `p=1.0` gives Manhattan distance,
+            `p=float("inf")` gives Chebyshev distance.
+
+    Returns:
+        A tensor of shape `(..., M, N)` containing the pairwise
+        distances.
+
+    Example:
+
+    >>> x1 = keras.ops.convert_to_tensor([[0., 0.], [1., 1.]])
+    >>> x2 = keras.ops.convert_to_tensor([[0., 0.], [2., 2.], [4., 4.]])
+    >>> keras.ops.cdist(x1, x2)
+    array([[0.       , 2.828427 , 5.656854 ],
+           [1.4142135, 1.4142135, 4.2426405]], dtype=float32)
+    """
+    if any_symbolic_tensors((x1, x2)):
+        return Cdist(p=p).symbolic_call(x1, x2)
+    return backend.numpy.cdist(x1, x2, p=p)
+
+
 class Ceil(Operation):
     def call(self, x):
         return backend.numpy.ceil(x)
