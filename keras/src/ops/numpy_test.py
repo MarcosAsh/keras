@@ -184,6 +184,8 @@ class NumpyTwoInputOpsDynamicShapeTest(testing.TestCase):
 
         with self.assertRaises(ValueError):
             knp.cdist(KerasTensor((3,)), KerasTensor((4, 3)))
+        with self.assertRaises(ValueError):
+            knp.cdist(KerasTensor((2, 3)), KerasTensor((2, 4)))
 
     def test_cross(self):
         x1 = KerasTensor((2, 3, 3))

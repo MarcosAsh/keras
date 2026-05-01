@@ -1956,6 +1956,16 @@ class Cdist(Operation):
                 "Inputs to `cdist` must have rank >= 2. "
                 f"Received shapes: x1={x1.shape}, x2={x2.shape}."
             )
+        if (
+            x1.shape[-1] is not None
+            and x2.shape[-1] is not None
+            and x1.shape[-1] != x2.shape[-1]
+        ):
+            raise ValueError(
+                "The feature dimension (last axis) of `x1` and `x2` must "
+                "match. Received shapes: "
+                f"x1.shape={x1.shape}, x2.shape={x2.shape}."
+            )
         batch_shape = broadcast_shapes(x1.shape[:-2], x2.shape[:-2])
         output_shape = tuple(batch_shape) + (x1.shape[-2], x2.shape[-2])
         dtype = dtypes.result_type(x1.dtype, x2.dtype, float)
