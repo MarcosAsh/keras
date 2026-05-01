@@ -39,11 +39,11 @@ class GroupedQueryAttention(Layer):
         dropout: Dropout probability.
         use_bias: Boolean, whether the dense layers use bias vectors/matrices.
         sliding_window: Optional positive integer. If set, restricts each
-            query position to attend only to the previous
-            `sliding_window - 1` key positions plus itself, producing the
-            local-window pattern used by Mistral, Llama-3 long-context, and
-            Phi-3. Composes naturally with `use_causal_mask=True` to give a
-            causal sliding window. Defaults to `None` (full attention).
+            query position to attend only to key positions within
+            `sliding_window - 1` of itself (a symmetric band). Composes
+            naturally with `use_causal_mask=True` to give the causal
+            sliding window used by Mistral, Llama-3 long-context, and
+            Phi-3. Defaults to `None` (full attention).
         flash_attention: If `None`, the layer attempts to use flash
             attention for faster and more memory-efficient attention
             computations when possible. This behavior can be configured using
@@ -422,9 +422,12 @@ class GroupedQueryAttention(Layer):
         """
         q_seq_length = ops.shape(query)[1]
         v_seq_length = q_seq_length if value is None else ops.shape(value)[1]
-        ones_mask = ops.ones((1, q_seq_length, v_seq_length), dtype="int32")
-        row_index = ops.cumsum(ones_mask, axis=-2)
-        col_index = ops.cumsum(ones_mask, axis=-1)
+        row_index = ops.reshape(
+            ops.arange(q_seq_length, dtype="int32"), (1, q_seq_length, 1)
+        )
+        col_index = ops.reshape(
+            ops.arange(v_seq_length, dtype="int32"), (1, 1, v_seq_length)
+        )
         return ops.less(ops.abs(row_index - col_index), self.sliding_window)
 
     def _compute_attention(
