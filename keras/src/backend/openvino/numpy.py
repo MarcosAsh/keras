@@ -1221,7 +1221,7 @@ def cdist(x1, x2, p=2.0):
     x2 = get_ov_output(x2)
     x1, x2 = _align_operand_types(x1, x2, "cdist()")
     out_type = x1.get_element_type()
-    if out_type.is_integral():
+    if out_type.is_integral() or out_type == Type.boolean:
         ov_type = OPENVINO_DTYPES[config.floatx()]
         x1 = ov_opset.convert(x1, ov_type).output(0)
         x2 = ov_opset.convert(x2, ov_type).output(0)
@@ -1236,10 +1236,10 @@ def cdist(x1, x2, p=2.0):
     if p == float("inf"):
         result = ov_opset.reduce_max(abs_diff, last_axis, False).output(0)
         return OpenVINOKerasTensor(result)
-    p_const = ov_opset.constant(float(p), out_type).output(0)
+    p_const = get_ov_output(float(p), out_type)
     powered = ov_opset.power(abs_diff, p_const).output(0)
     summed = ov_opset.reduce_sum(powered, last_axis, False).output(0)
-    inv_p = ov_opset.constant(1.0 / p, out_type).output(0)
+    inv_p = get_ov_output(1.0 / p, out_type)
     result = ov_opset.power(summed, inv_p).output(0)
     return OpenVINOKerasTensor(result)
 
