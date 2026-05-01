@@ -380,25 +380,30 @@ def bidirectional_lstm(
     hidden_size = fwd_recurrent_kernel.shape[0]
     batch_size = inputs.shape[0]
 
-    def _pack(kernel, recurrent_kernel, bias):
+    def _pack_matrices(kernel, recurrent_kernel):
         # Transpose Keras kernels to cuDNN layout and flatten.
         # Gate order [i, f, c, o] matches cuDNN [i, f, g, o].
         W_ih = jnp.asarray(kernel).T
         W_hh = jnp.asarray(recurrent_kernel).T
+        return jnp.concatenate([W_ih.ravel(), W_hh.ravel()])
+
+    def _pack_biases(bias):
         if bias is not None:
             b_ih = jnp.asarray(bias)
         else:
             b_ih = jnp.zeros(4 * hidden_size)
         b_hh = jnp.zeros_like(b_ih)
-        return jnp.concatenate(
-            [W_ih.ravel(), W_hh.ravel(), b_ih.ravel(), b_hh.ravel()]
-        )
+        return jnp.concatenate([b_ih.ravel(), b_hh.ravel()])
 
-    # cuDNN bidirectional weights: forward direction first, then backward.
+    # `jax.experimental.rnn` lays the bidirectional flat blob out as all
+    # matrices first across both pseudo-layers, then all biases. See
+    # `_get_params_shapes_in_lstm` in jax/experimental/rnn.py.
     weights = jnp.concatenate(
         [
-            _pack(fwd_kernel, fwd_recurrent_kernel, fwd_bias),
-            _pack(bwd_kernel, bwd_recurrent_kernel, bwd_bias),
+            _pack_matrices(fwd_kernel, fwd_recurrent_kernel),
+            _pack_matrices(bwd_kernel, bwd_recurrent_kernel),
+            _pack_biases(fwd_bias),
+            _pack_biases(bwd_bias),
         ]
     )
 
