@@ -364,6 +364,14 @@ class SimpleRNNTest(testing.TestCase):
         mask = np.ones((2, 5), dtype="bool")
         self.assertFalse(eligible._can_attempt_fused_lstm(mask=mask))
 
+        # Wrong initial_state arity (should be 4: fwd_h, fwd_c, bwd_h, bwd_c).
+        wrong_state = [np.zeros((2, 4), dtype="float32")] * 2
+        self.assertFalse(
+            eligible._can_attempt_fused_lstm(
+                mask=None, initial_state=wrong_state
+            )
+        )
+
     def test_fused_lstm_matches_unfused(self):
         # The fused path requires backend support (JAX with cuDNN today).
         # On other backends and on CPU runners, `backend.bidirectional_lstm`

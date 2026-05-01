@@ -5,6 +5,7 @@ from keras.src import ops
 from keras.src import utils
 from keras.src.api_export import keras_export
 from keras.src.layers.layer import Layer
+from keras.src.layers.rnn.lstm import LSTM
 from keras.src.saving import serialization_lib
 
 
@@ -201,7 +202,7 @@ class Bidirectional(Layer):
         mask=None,
         training=None,
     ):
-        if self._can_attempt_fused_lstm(mask):
+        if self._can_attempt_fused_lstm(mask, initial_state):
             try:
                 return self._call_fused_lstm(sequences, initial_state)
             except NotImplementedError:
@@ -265,7 +266,7 @@ class Bidirectional(Layer):
             return (output,) + states
         return output
 
-    def _can_attempt_fused_lstm(self, mask):
+    def _can_attempt_fused_lstm(self, mask, initial_state=None):
         # Layer-level preconditions for dispatching to
         # `backend.bidirectional_lstm`. Backends that don't support a
         # fused path (or don't have the runtime resources for one, e.g.
@@ -273,8 +274,8 @@ class Bidirectional(Layer):
         # the caller falls back to the two-layer path.
         if mask is not None or self.stateful:
             return False
-
-        from keras.src.layers.rnn.lstm import LSTM
+        if initial_state is not None and len(initial_state) != 4:
+            return False
 
         fwd, bwd = self.forward_layer, self.backward_layer
         if not isinstance(fwd, LSTM) or not isinstance(bwd, LSTM):
@@ -311,8 +312,6 @@ class Bidirectional(Layer):
             zeros = ops.zeros((batch_size, units), dtype=sequences.dtype)
             fwd_h0, fwd_c0, bwd_h0, bwd_c0 = zeros, zeros, zeros, zeros
         else:
-            if len(initial_state) != 4:
-                raise NotImplementedError
             fwd_h0, fwd_c0, bwd_h0, bwd_c0 = initial_state
 
         fwd_out, bwd_out = backend.bidirectional_lstm(
