@@ -83,9 +83,12 @@ def lstsq(a, b, rcond=None):
     # which interprets `rcond` differently from numpy and can return
     # large errors on near-rank-deficient inputs. Pin the SVD-based
     # `gelsd` driver when an explicit `rcond` is supplied so the result
-    # matches numpy's `linalg.lstsq` semantics. The `driver` argument is
-    # only consulted on CPU; on CUDA torch ignores it (and `rcond`).
+    # matches numpy's `linalg.lstsq` semantics. CUDA only supports the
+    # `gels` driver, which has no rcond cutoff, so fall back to SVD via
+    # `pinv` to match numpy semantics there.
     if rcond is not None:
+        if a.device.type == "cuda":
+            return torch.linalg.pinv(a, rtol=rcond) @ b
         return torch.linalg.lstsq(a, b, rcond=rcond, driver="gelsd")[0]
     return torch.linalg.lstsq(a, b, rcond=rcond)[0]
 
