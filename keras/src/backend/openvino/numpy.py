@@ -1216,10 +1216,6 @@ def cbrt(x):
     return OpenVINOKerasTensor(res.output(0))
 
 
-def cdist(x1, x2, p=2.0):
-    raise NotImplementedError("`cdist` is not supported with openvino backend")
-
-
 def ceil(x):
     x = get_ov_output(x)
     x_type = x.get_element_type()

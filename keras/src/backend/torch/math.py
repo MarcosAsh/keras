@@ -3,9 +3,20 @@ import math
 import torch
 
 from keras.src.backend import standardize_dtype
+from keras.src.backend.common import dtypes
+from keras.src.backend.torch.core import cast
 from keras.src.backend.torch.core import convert_to_tensor
 from keras.src.backend.torch.core import get_device
 from keras.src.backend.torch.numpy import pad
+
+
+def cdist(x1, x2, p=2.0):
+    x1 = convert_to_tensor(x1)
+    x2 = convert_to_tensor(x2)
+    out_dtype = dtypes.result_type(x1.dtype, x2.dtype, float)
+    x1 = cast(x1, out_dtype)
+    x2 = cast(x2, out_dtype)
+    return torch.cdist(x1, x2, p=p)
 
 
 def _segment_reduction_fn(data, segment_ids, reduction_method, num_segments):

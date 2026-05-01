@@ -4,7 +4,9 @@ from keras.src import backend
 from keras.src.api_export import keras_export
 from keras.src.backend import KerasTensor
 from keras.src.backend import any_symbolic_tensors
+from keras.src.backend.common import dtypes
 from keras.src.ops.operation import Operation
+from keras.src.ops.operation_utils import broadcast_shapes
 from keras.src.ops.operation_utils import reduce_shape
 
 
@@ -1146,3 +1148,68 @@ def view_as_real(x):
     real_part = backend.numpy.real(x)
     imag_part = backend.numpy.imag(x)
     return backend.numpy.stack((real_part, imag_part), axis=-1)
+
+
+class CDist(Operation):
+    def __init__(self, p=2.0, *, name=None):
+        super().__init__(name=name)
+        self.p = p
+
+    def call(self, x1, x2):
+        return backend.math.cdist(x1, x2, p=self.p)
+
+    def compute_output_spec(self, x1, x2):
+        if len(x1.shape) < 2 or len(x2.shape) < 2:
+            raise ValueError(
+                "Inputs to `cdist` must have rank >= 2. "
+                f"Received shapes: x1={x1.shape}, x2={x2.shape}."
+            )
+        if (
+            x1.shape[-1] is not None
+            and x2.shape[-1] is not None
+            and x1.shape[-1] != x2.shape[-1]
+        ):
+            raise ValueError(
+                "The feature dimension (last axis) of `x1` and `x2` must "
+                "match. Received shapes: "
+                f"x1.shape={x1.shape}, x2.shape={x2.shape}."
+            )
+        batch_shape = broadcast_shapes(x1.shape[:-2], x2.shape[:-2])
+        output_shape = tuple(batch_shape) + (x1.shape[-2], x2.shape[-2])
+        dtype = dtypes.result_type(x1.dtype, x2.dtype, float)
+        return KerasTensor(output_shape, dtype=dtype)
+
+
+@keras_export("keras.ops.cdist")
+def cdist(x1, x2, p=2.0):
+    """Compute pairwise distances between two collections of vectors.
+
+    For input tensors `x1` of shape `(..., M, D)` and `x2` of shape
+    `(..., N, D)`, returns an output of shape `(..., M, N)` where
+    `out[..., i, j]` is the p-norm distance between `x1[..., i, :]`
+    and `x2[..., j, :]`.
+
+    Args:
+        x1: Input tensor of shape `(..., M, D)`.
+        x2: Input tensor of shape `(..., N, D)`. The trailing dimension
+            must match that of `x1`. Leading batch dimensions are
+            broadcast against those of `x1`.
+        p: Order of the Minkowski p-norm to use, defaults to `2.0`
+            (Euclidean distance). `p=1.0` gives Manhattan distance,
+            `p=float("inf")` gives Chebyshev distance.
+
+    Returns:
+        A tensor of shape `(..., M, N)` containing the pairwise
+        distances.
+
+    Example:
+
+    >>> x1 = keras.ops.convert_to_tensor([[0., 0.], [1., 1.]])
+    >>> x2 = keras.ops.convert_to_tensor([[0., 0.], [2., 2.], [4., 4.]])
+    >>> keras.ops.cdist(x1, x2)
+    array([[0.       , 2.828427 , 5.656854 ],
+           [1.4142135, 1.4142135, 4.2426405]], dtype=float32)
+    """
+    if any_symbolic_tensors((x1, x2)):
+        return CDist(p=p).symbolic_call(x1, x2)
+    return backend.math.cdist(x1, x2, p=p)

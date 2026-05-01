@@ -5,11 +5,45 @@ from openvino import Type
 from openvino.opset16 import istft as ov_istft
 from openvino.opset16 import segment_max as ov_segment_max
 
+from keras.src.backend import config
+from keras.src.backend.openvino.core import OPENVINO_DTYPES
 from keras.src.backend.openvino.core import OpenVINOKerasTensor
+from keras.src.backend.openvino.core import (
+    align_operand_types as _align_operand_types,
+)
 from keras.src.backend.openvino.core import cast
 from keras.src.backend.openvino.core import get_ov_output
 from keras.src.backend.openvino.core import standardize_dtype
 from keras.src.backend.openvino.numpy import stack
+
+
+def cdist(x1, x2, p=2.0):
+    x1 = get_ov_output(x1)
+    x2 = get_ov_output(x2)
+    x1, x2 = _align_operand_types(x1, x2, "cdist()")
+    out_type = x1.get_element_type()
+    if out_type.is_integral():
+        ov_type = OPENVINO_DTYPES[config.floatx()]
+        x1 = ov_opset.convert(x1, ov_type).output(0)
+        x2 = ov_opset.convert(x2, ov_type).output(0)
+        out_type = x1.get_element_type()
+    neg2 = ov_opset.constant(-2, Type.i32).output(0)
+    neg3 = ov_opset.constant(-3, Type.i32).output(0)
+    x1 = ov_opset.unsqueeze(x1, neg2).output(0)
+    x2 = ov_opset.unsqueeze(x2, neg3).output(0)
+    diff = ov_opset.subtract(x1, x2).output(0)
+    abs_diff = ov_opset.absolute(diff).output(0)
+    last_axis = ov_opset.constant(-1, Type.i32).output(0)
+    if p == float("inf"):
+        result = ov_opset.reduce_max(abs_diff, last_axis, False).output(0)
+        return OpenVINOKerasTensor(result)
+    p_const = ov_opset.constant(float(p), out_type).output(0)
+    powered = ov_opset.power(abs_diff, p_const).output(0)
+    summed = ov_opset.reduce_sum(powered, last_axis, False).output(0)
+    inv_p = ov_opset.constant(1.0 / p, out_type).output(0)
+    result = ov_opset.power(summed, inv_p).output(0)
+    return OpenVINOKerasTensor(result)
+
 
 INT32_MAX = 2**31 - 1
 
