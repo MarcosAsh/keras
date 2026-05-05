@@ -153,6 +153,31 @@ class JaxDistributionLibTest(testing.TestCase):
         self.assertEqual(jax_mesh.devices.shape, self.mesh_shape)
         self.assertEqual(jax_mesh.axis_names, ("batch", "model"))
 
+    def test_to_abstract_sharding(self):
+        jax_mesh = jax.sharding.Mesh(
+            np.array(jax.devices()).reshape(self.mesh_shape), ("batch", "model")
+        )
+        spec = P("batch", None)
+        concrete = jax.sharding.NamedSharding(jax_mesh, spec)
+        out = backend_dlib._to_abstract_sharding(concrete)
+        if getattr(jax_mesh, "abstract_mesh", None) is not None:
+            self.assertIsInstance(out, jax.sharding.NamedSharding)
+            self.assertIs(out.mesh, jax_mesh.abstract_mesh)
+        else:
+            self.assertIs(out, concrete)
+        # Pass-through cases.
+        self.assertIsNone(backend_dlib._to_abstract_sharding(None))
+
+        # The trainer uses this helper via tree.map_structure over a pytree
+        # of shardings before passing them as `jit(out_shardings=...)`.
+        from keras.src import tree
+
+        pytree = ([concrete, concrete], [concrete])
+        mapped = tree.map_structure(backend_dlib._to_abstract_sharding, pytree)
+        if getattr(jax_mesh, "abstract_mesh", None) is not None:
+            for leaf in mapped[0] + mapped[1]:
+                self.assertIs(leaf.mesh, jax_mesh.abstract_mesh)
+
     def test_to_backend_layout(self):
         axes = ["data", None]
         mesh = distribution_lib.DeviceMesh(self.mesh_shape, ["data", "model"])

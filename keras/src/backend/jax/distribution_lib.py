@@ -203,6 +203,29 @@ def _to_backend_mesh(device_mesh):
     return jax.sharding.Mesh(devices, device_mesh.axis_names)
 
 
+def _to_abstract_sharding(sharding):
+    """Convert a sharding to use AbstractMesh for JIT-stable cache keys.
+
+    For a `NamedSharding(mesh, spec)`, returns one with `mesh.abstract_mesh`
+    when the running JAX version exposes it; otherwise the sharding is
+    returned unchanged. Other sharding types are passed through.
+
+    Args:
+        sharding: A single `jax.sharding.Sharding`, or `None`.
+
+    Returns:
+        A sharding with `AbstractMesh` where available, else the original.
+    """
+    if sharding is None:
+        return None
+    if not isinstance(sharding, jax.sharding.NamedSharding):
+        return sharding
+    abstract = getattr(sharding.mesh, "abstract_mesh", None)
+    if abstract is None:
+        return sharding
+    return jax.sharding.NamedSharding(abstract, sharding.spec)
+
+
 def _to_backend_layout(tensor_layout):
     """Convert the TensorLayout to JAX backend specific Sharding.
 
