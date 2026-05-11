@@ -897,6 +897,39 @@ def bidirectional_lstm(
     ``torch._VF.lstm(..., bidirectional=True)`` call instead of dispatching
     two unidirectional LSTM calls. Backward outputs are returned in original
     time order, ready for the caller's ``merge_mode`` to consume directly.
+
+    Args:
+        inputs: Input tensor of shape ``(batch, time, features)``.
+        fwd_initial_state_h: Initial hidden state for the forward direction,
+            shape ``(batch, hidden)``.
+        fwd_initial_state_c: Initial cell state for the forward direction,
+            shape ``(batch, hidden)``.
+        bwd_initial_state_h: Initial hidden state for the backward direction,
+            shape ``(batch, hidden)``.
+        bwd_initial_state_c: Initial cell state for the backward direction,
+            shape ``(batch, hidden)``.
+        mask: Sequence mask. Only ``None`` is supported; otherwise
+            ``NotImplementedError`` is raised so the caller can fall back to
+            the two-pass path.
+        fwd_kernel: Forward input kernel, shape ``(features, 4 * hidden)``.
+        fwd_recurrent_kernel: Forward recurrent kernel, shape
+            ``(hidden, 4 * hidden)``.
+        fwd_bias: Forward bias, shape ``(4 * hidden,)`` or ``None``.
+        bwd_kernel: Backward input kernel, shape ``(features, 4 * hidden)``.
+        bwd_recurrent_kernel: Backward recurrent kernel, shape
+            ``(hidden, 4 * hidden)``.
+        bwd_bias: Backward bias, shape ``(4 * hidden,)`` or ``None``.
+        activation: Output activation. Only ``tanh`` engages cuDNN.
+        recurrent_activation: Gate activation. Only ``sigmoid`` engages
+            cuDNN.
+        return_sequences: If ``True``, return outputs at every timestep;
+            otherwise only the last timestep.
+        unroll: Not supported; cuDNN requires the rolled path.
+
+    Returns:
+        A pair ``((fwd_last, fwd_outputs, [fwd_h_n, fwd_c_n]),
+        (bwd_last, bwd_outputs, [bwd_h_n, bwd_c_n]))`` matching the JAX
+        equivalent's return shape.
     """
     if mask is not None:
         raise NotImplementedError
@@ -914,17 +947,13 @@ def bidirectional_lstm(
     fwd_recurrent_kernel = convert_to_tensor(fwd_recurrent_kernel)
     bwd_kernel = convert_to_tensor(bwd_kernel)
     bwd_recurrent_kernel = convert_to_tensor(bwd_recurrent_kernel)
-    if fwd_bias is not None:
-        fwd_bias = convert_to_tensor(fwd_bias)
-    if bwd_bias is not None:
-        bwd_bias = convert_to_tensor(bwd_bias)
 
     compute_dtype = fwd_kernel.dtype
-    inputs = convert_to_tensor(inputs).to(compute_dtype).to(device)
-    fwd_h0 = convert_to_tensor(fwd_initial_state_h).to(compute_dtype).to(device)
-    fwd_c0 = convert_to_tensor(fwd_initial_state_c).to(compute_dtype).to(device)
-    bwd_h0 = convert_to_tensor(bwd_initial_state_h).to(compute_dtype).to(device)
-    bwd_c0 = convert_to_tensor(bwd_initial_state_c).to(compute_dtype).to(device)
+    inputs = convert_to_tensor(inputs, dtype=compute_dtype)
+    fwd_h0 = convert_to_tensor(fwd_initial_state_h, dtype=compute_dtype)
+    fwd_c0 = convert_to_tensor(fwd_initial_state_c, dtype=compute_dtype)
+    bwd_h0 = convert_to_tensor(bwd_initial_state_h, dtype=compute_dtype)
+    bwd_c0 = convert_to_tensor(bwd_initial_state_c, dtype=compute_dtype)
 
     fwd_params = prepare_lstm_params(
         fwd_kernel, fwd_recurrent_kernel, fwd_bias, device
