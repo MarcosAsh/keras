@@ -647,8 +647,9 @@ def _cudnn_lstm(
 
     params = prepare_lstm_params(kernel, recurrent_kernel, bias, device)
 
-    # Use functional LSTM to maintain gradient flow through weight tensors
-    outputs, (h_n, c_n) = torch._VF.lstm(
+    # Use functional LSTM to maintain gradient flow through weight tensors.
+    # ``torch._VF.lstm`` returns a flat ``(output, h_n, c_n)`` tuple.
+    outputs, h_n, c_n = torch._VF.lstm(
         inputs,
         (initial_state_h, initial_state_c),
         params,
@@ -872,5 +873,116 @@ def _cudnn_gru(
     return last_output, outputs, [h_n]
 
 
-def bidirectional_lstm(*args, **kwargs):
-    raise NotImplementedError
+def bidirectional_lstm(
+    inputs,
+    fwd_initial_state_h,
+    fwd_initial_state_c,
+    bwd_initial_state_h,
+    bwd_initial_state_c,
+    mask,
+    fwd_kernel,
+    fwd_recurrent_kernel,
+    fwd_bias,
+    bwd_kernel,
+    bwd_recurrent_kernel,
+    bwd_bias,
+    activation,
+    recurrent_activation,
+    return_sequences=False,
+    unroll=False,
+):
+    """Fused bidirectional cuDNN LSTM for the torch backend.
+
+    Runs forward and backward passes in a single
+    ``torch._VF.lstm(..., bidirectional=True)`` call instead of dispatching
+    two unidirectional LSTM calls. Backward outputs are returned in original
+    time order, ready for the caller's ``merge_mode`` to consume directly.
+    """
+    if mask is not None:
+        raise NotImplementedError
+    if not cudnn_ok(
+        activation,
+        recurrent_activation,
+        unroll,
+        use_bias=fwd_bias is not None and bwd_bias is not None,
+    ):
+        raise NotImplementedError
+
+    device = get_device()
+
+    fwd_kernel = convert_to_tensor(fwd_kernel)
+    fwd_recurrent_kernel = convert_to_tensor(fwd_recurrent_kernel)
+    bwd_kernel = convert_to_tensor(bwd_kernel)
+    bwd_recurrent_kernel = convert_to_tensor(bwd_recurrent_kernel)
+    if fwd_bias is not None:
+        fwd_bias = convert_to_tensor(fwd_bias)
+    if bwd_bias is not None:
+        bwd_bias = convert_to_tensor(bwd_bias)
+
+    compute_dtype = fwd_kernel.dtype
+    inputs = convert_to_tensor(inputs).to(compute_dtype).to(device)
+    fwd_h0 = convert_to_tensor(fwd_initial_state_h).to(compute_dtype).to(device)
+    fwd_c0 = convert_to_tensor(fwd_initial_state_c).to(compute_dtype).to(device)
+    bwd_h0 = convert_to_tensor(bwd_initial_state_h).to(compute_dtype).to(device)
+    bwd_c0 = convert_to_tensor(bwd_initial_state_c).to(compute_dtype).to(device)
+
+    fwd_params = prepare_lstm_params(
+        fwd_kernel, fwd_recurrent_kernel, fwd_bias, device
+    )
+    bwd_params = prepare_lstm_params(
+        bwd_kernel, bwd_recurrent_kernel, bwd_bias, device
+    )
+
+    # torch._VF.lstm with bidirectional=True expects 4 params per direction,
+    # forward direction first, then backward.
+    params = fwd_params + bwd_params
+
+    # cuDNN expects (num_layers * num_directions, batch, hidden) for h0/c0.
+    h_0 = torch.stack([fwd_h0, bwd_h0], dim=0)
+    c_0 = torch.stack([fwd_c0, bwd_c0], dim=0)
+
+    try:
+        # ``torch._VF.lstm`` returns a flat ``(output, h_n, c_n)`` tuple.
+        outputs, h_n, c_n = torch._VF.lstm(
+            inputs,
+            (h_0, c_0),
+            params,
+            True,  # has_biases
+            1,  # num_layers
+            0.0,  # dropout
+            torch.is_grad_enabled(),  # training
+            True,  # bidirectional
+            True,  # batch_first
+        )
+    except (RuntimeError, TypeError, ValueError) as e:
+        raise NotImplementedError(
+            f"cuDNN bidirectional LSTM failed: {e}"
+        ) from e
+
+    # outputs: (batch, seq_len, 2 * hidden_size). First half is the forward
+    # direction, second half is the backward direction (in original time
+    # order, courtesy of cuDNN).
+    hidden_size = fwd_recurrent_kernel.shape[0]
+    y_fwd = outputs[..., :hidden_size]
+    y_bwd = outputs[..., hidden_size:]
+
+    fwd_h_n, bwd_h_n = h_n[0], h_n[1]
+    fwd_c_n, bwd_c_n = c_n[0], c_n[1]
+
+    # Forward "last" is the last timestep of the forward sweep; backward
+    # "last" is the first timestep in original time order (i.e., the result
+    # after the full reverse sweep).
+    fwd_last = y_fwd[:, -1]
+    bwd_last = y_bwd[:, 0]
+
+    if return_sequences:
+        fwd_outputs = y_fwd
+        bwd_outputs = y_bwd
+    else:
+        fwd_outputs = fwd_last.unsqueeze(1)
+        bwd_outputs = bwd_last.unsqueeze(1)
+
+    return (
+        (fwd_last, fwd_outputs, [fwd_h_n, fwd_c_n]),
+        (bwd_last, bwd_outputs, [bwd_h_n, bwd_c_n]),
+    )
