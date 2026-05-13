@@ -559,9 +559,6 @@ def lstm(
     if mask is not None:
         raise NotImplementedError
 
-    # Get device from inputs
-    device = get_device()
-
     # Convert to torch tensors (convert_to_tensor unwraps Variables)
     kernel = convert_to_tensor(kernel)
     recurrent_kernel = convert_to_tensor(recurrent_kernel)
@@ -580,16 +577,24 @@ def lstm(
         seq_dim = 1 if batch_first else 0
         inputs = torch.flip(inputs, dims=[seq_dim])
 
-    # Move all tensors to the same device
-    inputs = inputs.to(device)
-    initial_state_h = initial_state_h.to(device)
-    initial_state_c = initial_state_c.to(device)
-
-    cudnn_supported = cudnn_ok(
-        activation,
-        recurrent_activation,
-        unroll,
-        use_bias=bias is not None,
+    # cuDNN only runs on CUDA. Skip it when inputs aren't on CUDA, or when
+    # we're inside a TorchScript / Dynamo trace -- the trace records device
+    # transfers that then fail device-consistency validation downstream
+    # (e.g. `torch.onnx.export` failing in `wrapper_CUDA_cat`).
+    device = inputs.device
+    cudnn_supported = (
+        device.type == "cuda"
+        and not torch.jit.is_tracing()
+        and not (
+            hasattr(torch.compiler, "is_compiling")
+            and torch.compiler.is_compiling()
+        )
+        and cudnn_ok(
+            activation,
+            recurrent_activation,
+            unroll,
+            use_bias=bias is not None,
+        )
     )
 
     if cudnn_supported:
@@ -941,8 +946,6 @@ def bidirectional_lstm(
     ):
         raise NotImplementedError
 
-    device = get_device()
-
     fwd_kernel = convert_to_tensor(fwd_kernel)
     fwd_recurrent_kernel = convert_to_tensor(fwd_recurrent_kernel)
     bwd_kernel = convert_to_tensor(bwd_kernel)
@@ -954,6 +957,21 @@ def bidirectional_lstm(
     fwd_c0 = convert_to_tensor(fwd_initial_state_c, dtype=compute_dtype)
     bwd_h0 = convert_to_tensor(bwd_initial_state_h, dtype=compute_dtype)
     bwd_c0 = convert_to_tensor(bwd_initial_state_c, dtype=compute_dtype)
+
+    # cuDNN only runs on CUDA. Fall back to the two-pass path when inputs
+    # aren't on CUDA, or when we're inside a TorchScript / Dynamo trace --
+    # the trace records device transfers that then fail device-consistency
+    # validation downstream (e.g. `torch.onnx.export` in `wrapper_CUDA_cat`).
+    device = inputs.device
+    if (
+        device.type != "cuda"
+        or torch.jit.is_tracing()
+        or (
+            hasattr(torch.compiler, "is_compiling")
+            and torch.compiler.is_compiling()
+        )
+    ):
+        raise NotImplementedError
 
     fwd_params = prepare_lstm_params(
         fwd_kernel, fwd_recurrent_kernel, fwd_bias, device
