@@ -292,7 +292,7 @@ def validate_reshape_shape(newshape, newshape_arg_name="newshape"):
     """
     neg_one_count = 0
     for dim in newshape:
-        if not isinstance(dim, int):
+        if not isinstance(dim, (int, np.integer)):
             continue
         if dim < -1:
             raise ValueError(
@@ -300,7 +300,7 @@ def validate_reshape_shape(newshape, newshape_arg_name="newshape"):
                 "non-negative integer, or `-1` for a single unknown "
                 f"dimension. Received: {newshape_arg_name}={newshape}."
             )
-        if dim == -1:
+        elif dim == -1:
             neg_one_count += 1
     if neg_one_count > 1:
         raise ValueError(
