@@ -41,18 +41,22 @@ class TorchLayer(torch.nn.Module):
         return Operation.__call__(self, *args, **kwargs)
 
     def _setattr_hook(self, name, value):
+        # Skip the wrapping logic for non-Module values so `torch._dynamo`
+        # does not specialize on every distinct `name` string and blow
+        # past `recompile_limit` (default 8).
+        if not isinstance(value, torch.nn.Module):
+            return name, value
+
         from keras.src.layers import Layer
+        from keras.src.utils.torch_utils import TorchModuleWrapper
 
         if (
-            isinstance(value, torch.nn.Module)
-            and not isinstance(value, Layer)
-            and not name == "_torch_params"
+            isinstance(value, Layer)
+            or name == "_torch_params"
+            or isinstance(self, TorchModuleWrapper)
         ):
-            from keras.src.utils.torch_utils import TorchModuleWrapper
-
-            if not isinstance(self, TorchModuleWrapper):
-                value = TorchModuleWrapper(value)
-        return name, value
+            return name, value
+        return name, TorchModuleWrapper(value)
 
     def _post_track_variable(self, variable):
         if hasattr(self, "_torch_params"):
