@@ -418,6 +418,25 @@ class GroupedQueryAttentionTest(testing.TestCase):
 
         self.assertAllClose(fast, slow, atol=1e-5)
 
+    def test_causal_only_skipped_for_subclass(self):
+        # A subclass with the previous _compute_attention signature must
+        # still receive the explicit causal mask, not None.
+        seen = {}
+
+        class Sub(layers.GroupedQueryAttention):
+            def _compute_attention(
+                self, query, key, value, attention_mask=None, training=None
+            ):
+                seen["mask_is_none"] = attention_mask is None
+                return super()._compute_attention(
+                    query, key, value, attention_mask, training
+                )
+
+        layer = Sub(head_dim=4, num_query_heads=4, num_key_value_heads=2)
+        x = np.random.RandomState(0).randn(2, 5, 16).astype("float32")
+        _ = layer(x, x, use_causal_mask=True)
+        self.assertFalse(seen["mask_is_none"])
+
     def test_causal_only_with_other_mask_falls_back(self):
         # If any other mask is also present, the is_causal=True shortcut
         # must not be taken since SDPA rejects mask + is_causal together.

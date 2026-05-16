@@ -273,7 +273,9 @@ class GroupedQueryAttention(Layer):
 
         # When causal masking is the only mask source, route through the
         # backend's native causal kernel by passing `is_causal=True` rather
-        # than materializing a [T, S] mask tensor.
+        # than materializing a [T, S] mask tensor. Skipped when a subclass
+        # overrides `_compute_attention`, since such a subclass would
+        # receive `attention_mask=None` and silently do unmasked attention.
         causal_only = (
             use_causal_mask
             and query_mask is None
@@ -281,6 +283,8 @@ class GroupedQueryAttention(Layer):
             and key_mask is None
             and attention_mask is None
             and self.sliding_window is None
+            and type(self)._compute_attention
+            is GroupedQueryAttention._compute_attention
         )
         if causal_only:
             attention_mask = None

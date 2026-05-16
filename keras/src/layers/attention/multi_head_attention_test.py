@@ -542,6 +542,38 @@ class MultiHeadAttentionTest(testing.TestCase):
 
         self.assertAllClose(fast, slow, atol=1e-5)
 
+    def test_causal_only_skipped_for_subclass(self):
+        # A subclass with the previous _compute_attention signature must not
+        # see the use_causal_mask kwarg, and must not receive attention_mask
+        # = None when use_causal_mask=True. Otherwise it would silently do
+        # unmasked attention.
+        seen = {}
+
+        class Sub(layers.MultiHeadAttention):
+            def _compute_attention(
+                self,
+                query,
+                key,
+                value,
+                attention_mask=None,
+                training=None,
+                return_attention_scores=False,
+            ):
+                seen["mask_is_none"] = attention_mask is None
+                return super()._compute_attention(
+                    query,
+                    key,
+                    value,
+                    attention_mask,
+                    training,
+                    return_attention_scores,
+                )
+
+        layer = Sub(num_heads=2, key_dim=4)
+        x = np.random.RandomState(0).randn(2, 5, 8).astype("float32")
+        _ = layer(x, x, use_causal_mask=True)
+        self.assertFalse(seen["mask_is_none"])
+
     def test_causal_only_with_other_mask_falls_back(self):
         # If any other mask source is present, the layer must NOT take the
         # is_causal=True shortcut, because torch's SDPA rejects passing both
