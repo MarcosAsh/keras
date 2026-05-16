@@ -400,6 +400,35 @@ class GroupedQueryAttentionTest(testing.TestCase):
                 else:
                     self.assertEqual(scores[i, j], 0.0)
 
+    def test_causal_only_fast_path(self):
+        # When `use_causal_mask=True` is the only mask source, the layer
+        # should route through `dot_product_attention(is_causal=True)` and
+        # not materialize a [T, S] mask. The output must match the explicit
+        # mask path.
+        layer = layers.GroupedQueryAttention(
+            head_dim=4, num_query_heads=4, num_key_value_heads=2
+        )
+        x = np.random.RandomState(0).randn(2, 5, 16).astype("float32")
+        _ = layer(x, x, use_causal_mask=True)
+        fast = layer(x, x, use_causal_mask=True)
+
+        t = x.shape[1]
+        causal = np.tril(np.ones((1, t, t), dtype="bool"))
+        slow = layer(x, x, attention_mask=causal)
+
+        self.assertAllClose(fast, slow, atol=1e-5)
+
+    def test_causal_only_with_other_mask_falls_back(self):
+        # If any other mask is also present, the is_causal=True shortcut
+        # must not be taken since SDPA rejects mask + is_causal together.
+        layer = layers.GroupedQueryAttention(
+            head_dim=4, num_query_heads=4, num_key_value_heads=2
+        )
+        x = np.random.RandomState(0).randn(2, 5, 16).astype("float32")
+        extra_mask = np.ones((2, 5, 5), dtype="bool")
+        out = layer(x, x, attention_mask=extra_mask, use_causal_mask=True)
+        self.assertEqual(tuple(out.shape), (2, 5, 16))
+
     def test_sliding_window_validation(self):
         with self.assertRaisesRegex(ValueError, "sliding_window"):
             layers.GroupedQueryAttention(

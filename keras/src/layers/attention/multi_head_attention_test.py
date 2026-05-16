@@ -523,6 +523,36 @@ class MultiHeadAttentionTest(testing.TestCase):
                 else:
                     self.assertEqual(scores[i, j], 0.0)
 
+    def test_causal_only_fast_path(self):
+        # When `use_causal_mask=True` is the only mask source, the layer
+        # should route through `dot_product_attention(is_causal=True)` and
+        # not materialize a [T, S] mask. The output must match the explicit
+        # mask path bit-for-bit (or near it).
+        layer = layers.MultiHeadAttention(num_heads=2, key_dim=4)
+        x = np.random.RandomState(0).randn(2, 5, 8).astype("float32")
+        # Force build so weights are shared between both calls.
+        _ = layer(x, x, use_causal_mask=True)
+        fast = layer(x, x, use_causal_mask=True)
+
+        # Reference: build the explicit causal mask and feed it as
+        # attention_mask, which bypasses the causal_only branch.
+        t = x.shape[1]
+        causal = np.tril(np.ones((1, t, t), dtype="bool"))
+        slow = layer(x, x, attention_mask=causal)
+
+        self.assertAllClose(fast, slow, atol=1e-5)
+
+    def test_causal_only_with_other_mask_falls_back(self):
+        # If any other mask source is present, the layer must NOT take the
+        # is_causal=True shortcut, because torch's SDPA rejects passing both
+        # an attn_mask and is_causal=True.
+        layer = layers.MultiHeadAttention(num_heads=2, key_dim=4)
+        x = np.random.RandomState(0).randn(2, 5, 8).astype("float32")
+        # Build with the slow path so the test exercises the merged path.
+        extra_mask = np.ones((2, 5, 5), dtype="bool")
+        out = layer(x, x, attention_mask=extra_mask, use_causal_mask=True)
+        self.assertEqual(tuple(out.shape), (2, 5, 8))
+
     def test_sliding_window_validation(self):
         with self.assertRaisesRegex(ValueError, "sliding_window"):
             layers.MultiHeadAttention(num_heads=2, key_dim=4, sliding_window=0)
