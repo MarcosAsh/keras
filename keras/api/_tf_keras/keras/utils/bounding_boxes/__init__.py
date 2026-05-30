@@ -31,3 +31,6 @@ from keras.src.layers.preprocessing.image_preprocessing.bounding_boxes.iou impor
 from keras.src.layers.preprocessing.image_preprocessing.bounding_boxes.iou import (
     compute_iou as compute_iou,
 )
+from keras.src.layers.preprocessing.image_preprocessing.bounding_boxes.non_max_suppression import (
+    non_max_suppression as non_max_suppression,
+)
