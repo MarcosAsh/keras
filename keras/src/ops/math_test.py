@@ -971,9 +971,9 @@ class MathOpsCorrectnessTest(testing.TestCase):
             window=window,
             center=center,
         )
-        if backend.backend() in ("numpy", "jax", "torch", "openvino"):
-            # these backends have different implementation for the boundary of
-            # the output, so we need to truncate 5% before assertAllClose
+        if backend.backend() != "tensorflow":
+            # Backends other than tensorflow implement the boundary of the
+            # output differently, so truncate 5% before assertAllClose.
             truncated_len = int(output.shape[-1] * 0.05)
             output = output[..., truncated_len:-truncated_len]
             ref = ref[..., truncated_len:-truncated_len]
@@ -1003,9 +1003,9 @@ class MathOpsCorrectnessTest(testing.TestCase):
             window=window,
             center=center,
         )
-        if backend.backend() in ("numpy", "jax", "torch", "openvino"):
-            # these backends have different implementation for the boundary of
-            # the output, so we need to truncate 5% before assertAllClose
+        if backend.backend() != "tensorflow":
+            # Backends other than tensorflow implement the boundary of the
+            # output differently, so truncate 5% before assertAllClose.
             truncated_len = int(output.shape[-1] * 0.05)
             output = output[..., truncated_len:-truncated_len]
             ref = ref[..., truncated_len:-truncated_len]

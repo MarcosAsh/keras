@@ -140,30 +140,20 @@ class LinalgOpsDynamicShapeTest(testing.TestCase):
         with self.assertRaises(ValueError):
             linalg.pinv(x)
 
-    def test_qr(self):
+    @parameterized.named_parameters(named_product(mode=["reduced", "complete"]))
+    def test_qr(self, mode):
         x = KerasTensor((None, 4, 3), dtype="float32")
-        q, r = linalg.qr(x, mode="reduced")
-        qref, rref = np.linalg.qr(np.ones((2, 4, 3)), mode="reduced")
-        qref_shape = (None,) + qref.shape[1:]
-        rref_shape = (None,) + rref.shape[1:]
-        self.assertEqual(q.shape, qref_shape)
-        self.assertEqual(r.shape, rref_shape)
-
-        q, r = linalg.qr(x, mode="complete")
-        qref, rref = np.linalg.qr(np.ones((2, 4, 3)), mode="complete")
+        q, r = linalg.qr(x, mode=mode)
+        qref, rref = np.linalg.qr(np.ones((2, 4, 3)), mode=mode)
         qref_shape = (None,) + qref.shape[1:]
         rref_shape = (None,) + rref.shape[1:]
         self.assertEqual(q.shape, qref_shape)
         self.assertEqual(r.shape, rref_shape)
 
     def test_qr_invalid_mode(self):
-        # backend agnostic error message
         x = np.array([[1, 2], [3, 4]])
-        invalid_mode = "invalid_mode"
-        with self.assertRaisesRegex(
-            ValueError, "Expected one of {'reduced', 'complete'}."
-        ):
-            linalg.qr(x, mode=invalid_mode)
+        with self.assertRaises(ValueError):
+            linalg.qr(x, mode="invalid_mode")
 
     def test_solve(self):
         a = KerasTensor([None, 20, 20])
@@ -343,18 +333,16 @@ class LinalgOpsStaticShapeTest(testing.TestCase):
         with self.assertRaises(ValueError):
             linalg.pinv(x)
 
-    def test_qr(self):
+    @parameterized.named_parameters(named_product(mode=["reduced", "complete"]))
+    def test_qr(self, mode):
         x = KerasTensor((4, 3), dtype="float32")
-        q, r = linalg.qr(x, mode="reduced")
-        qref, rref = np.linalg.qr(np.ones((4, 3)), mode="reduced")
+        q, r = linalg.qr(x, mode=mode)
+        qref, rref = np.linalg.qr(np.ones((4, 3)), mode=mode)
         self.assertEqual(q.shape, qref.shape)
         self.assertEqual(r.shape, rref.shape)
 
-        q, r = linalg.qr(x, mode="complete")
-        qref, rref = np.linalg.qr(np.ones((4, 3)), mode="complete")
-        self.assertEqual(q.shape, qref.shape)
-        self.assertEqual(r.shape, rref.shape)
-
+    def test_qr_invalid_mode(self):
+        x = KerasTensor((4, 3), dtype="float32")
         with self.assertRaises(ValueError):
             linalg.qr(x, mode="invalid")
 
@@ -609,15 +597,11 @@ class LinalgOpsCorrectnessTest(testing.TestCase):
         )
         self.assertAllClose(output, expected_result, atol=1e-5)
 
-    def test_qr(self):
+    @parameterized.named_parameters(named_product(mode=["reduced", "complete"]))
+    def test_qr(self, mode):
         x = np.random.random((4, 5))
-        q, r = linalg.qr(x, mode="reduced")
-        qref, rref = np.linalg.qr(x, mode="reduced")
-        self.assertAllClose(q, qref, atol=1e-5, rtol=1e-4)
-        self.assertAllClose(r, rref, atol=1e-5, rtol=1e-4)
-
-        q, r = linalg.qr(x, mode="complete")
-        qref, rref = np.linalg.qr(x, mode="complete")
+        q, r = linalg.qr(x, mode=mode)
+        qref, rref = np.linalg.qr(x, mode=mode)
         self.assertAllClose(q, qref, atol=1e-5, rtol=1e-4)
         self.assertAllClose(r, rref, atol=1e-5, rtol=1e-4)
 

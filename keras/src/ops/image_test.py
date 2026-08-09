@@ -1868,14 +1868,14 @@ class ImageOpsCorrectnessTest(testing.TestCase):
         )
         self.assertEqual(out.shape, (2, 3, 25, 25))
 
-        x = np.ones((2, 3, 10, 10)) * 128
+        x = np.ones((2, 3, 10, 10), dtype="float32") * 128
         out = kimage.resize(
             x, size=(4, 4), pad_to_aspect_ratio=True, fill_value=fill_value
         )
         self.assertEqual(out.shape, (2, 3, 4, 4))
         self.assertAllClose(out[:, 0, :, :], np.ones((2, 4, 4)) * 128)
 
-        x = np.ones((2, 3, 10, 8)) * 128
+        x = np.ones((2, 3, 10, 8), dtype="float32") * 128
         out = kimage.resize(
             x, size=(4, 4), pad_to_aspect_ratio=True, fill_value=fill_value
         )
